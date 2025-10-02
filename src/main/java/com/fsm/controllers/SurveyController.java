@@ -16,6 +16,13 @@ import javafx.collections.ObservableList;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.SimpleIntegerProperty;
 
+import javafx.fxml.FXMLLoader;
+import javafx.scene.Parent;
+import javafx.scene.Scene;
+import javafx.stage.Modality;
+import javafx.stage.Stage;
+import java.io.IOException;
+
 // Note: No class declaration here
 
 public class SurveyController {
@@ -107,7 +114,30 @@ public class SurveyController {
     // --- Button Handlers ---
 
     private void handleAddSurvey() {
-        System.out.println("Add Survey button clicked.");
+        try {
+            FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/fsm/add-survey-form.fxml"));
+            Parent root = loader.load();
+
+            // Get the controller instance of the new form
+            AddSurveyController addController = loader.getController();
+
+            // Pass a reference to THIS controller, so the form can call refreshTable()
+            addController.setParentController(this);
+
+            // Create the new modal stage (window)
+            Stage stage = new Stage();
+            stage.setTitle("Add New Survey");
+
+            // Modality ensures the user must interact with this window before returning to the dashboard
+            stage.initModality(Modality.APPLICATION_MODAL);
+
+            stage.setScene(new Scene(root));
+            stage.showAndWait(); // Wait until the form is closed
+
+        } catch (IOException e) {
+            e.printStackTrace();
+            System.err.println("Error loading Add Survey form: " + e.getMessage());
+        }
     }
 
     private void handleEditSurvey() {
@@ -126,5 +156,9 @@ public class SurveyController {
         } else {
             System.out.println("No survey selected for deletion.");
         }
+    }
+
+    public void refreshTable() {
+        loadSurveyData();
     }
 }
