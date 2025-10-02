@@ -14,6 +14,13 @@ import org.bson.Document;
 import java.util.ArrayList;
 import java.util.List;
 
+import javafx.scene.control.Label;
+import javafx.scene.control.TextArea;
+import javafx.scene.control.ComboBox;
+import javafx.scene.layout.VBox;
+import javafx.scene.layout.HBox;
+import java.util.UUID;
+
 public class QuestionBuilderController {
     public static class Question {
         private String id;
@@ -35,6 +42,12 @@ public class QuestionBuilderController {
         public List<String> getOptions() { return options; }
     }
     // FXML elements will go here
+    @FXML private Label lblSurveyName;
+    @FXML private TextArea txtQuestionText;
+    @FXML private ComboBox<String> cmbQuestionType;
+    @FXML private VBox vboxDynamicOptions;
+    @FXML private VBox vboxQuestionsList;
+    @FXML private Button btnAddQuestion;
     @FXML private Button btnSave;
     @FXML private Button btnCancel;
 
@@ -42,6 +55,7 @@ public class QuestionBuilderController {
     private SurveyController parentController;
     private SurveyController.Survey currentSurvey;
     private List<Question> currentQuestions = new ArrayList<>();
+    private int questionCounter = 0;
 
     // Use the fully qualified name for the inner class
     // This is the method called by SurveyController to pass data
@@ -49,21 +63,175 @@ public class QuestionBuilderController {
         this.parentController = parent;
         this.currentSurvey = survey;
 
-        System.out.println("Question Builder opened for survey: " + survey.getName());
-        // Logic to load existing questions will go here
+        lblSurveyName.setText("Question Builder: " + survey.getName());
+
+        // 1. Load existing questions from DB when opening
+        loadExistingQuestions(survey.getName());
+
+        // 2. Populate the UI with the loaded questions
+        redrawQuestionsList();
     }
 
     @FXML
     public void initialize() {
-        // Initialization for FXML components goes here
+        // Initialize the Question Type ComboBox
+        cmbQuestionType.getItems().addAll("TEXT_INPUT", "SINGLE_CHOICE", "RATING_SCALE");
+        cmbQuestionType.setValue("TEXT_INPUT");
+
+        // Setup Button Handlers
         btnCancel.setOnAction(e -> closeWindow());
+        btnAddQuestion.setOnAction(e -> handleAddQuestion());
+
+        // Setup listener to dynamically change input based on selected type
+        cmbQuestionType.valueProperty().addListener((obs, oldVal, newVal) -> updateDynamicOptions(newVal));
+
+        // Initialize dynamic options area (default to TEXT_INPUT)
+        updateDynamicOptions("TEXT_INPUT");
+    }
+
+    //Handles the logic for dynamic UI based on question type
+    private void updateDynamicOptions(String type) {
+        vboxDynamicOptions.getChildren().clear();
+
+        if ("SINGLE_CHOICE".equals(type)) {
+            Label label = new Label("Options (comma-separated):");
+            TextArea optionsArea = new TextArea();
+            optionsArea.setPromptText("Option 1, Option 2, Option 3...");
+            optionsArea.setPrefHeight(50);
+            optionsArea.setId("optionsInput"); // Use an ID to easily retrieve the value later
+            vboxDynamicOptions.getChildren().addAll(label, optionsArea);
+        }
+        // We can add logic for RATING_SCALE (e.g., Min/Max/Steps) later if needed
+    }
+
+    //Handles adding a question from the input panel to the currentQuestions list
+    private void handleAddQuestion() {
+        String text = txtQuestionText.getText().trim();
+        String type = cmbQuestionType.getValue();
+
+        if (text.isEmpty()) {
+            System.err.println("Question text cannot be empty.");
+            return;
+        }
+
+        List<String> options = new ArrayList<>();
+        if ("SINGLE_CHOICE".equals(type)) {
+            TextArea optionsArea = (TextArea) vboxDynamicOptions.lookup("#optionsInput");
+            if (optionsArea != null) {
+                String optionsText = optionsArea.getText().trim();
+                if (!optionsText.isEmpty()) {
+                    // Split by comma and trim whitespace
+                    options = List.of(optionsText.split(",")).stream()
+                            .map(String::trim)
+                            .filter(s -> !s.isEmpty())
+                            .collect(java.util.stream.Collectors.toList());
+                }
+            }
+        }
+
+        // Generate a simple unique ID
+        String questionId = "Q" + (++questionCounter);
+
+        // Create new Question object and add to list
+        Question newQuestion = new Question(questionId, text, type, options);
+        currentQuestions.add(newQuestion);
+
+        // Redraw the list to show the new question
+        redrawQuestionsList();
+
+        // Clear the input fields for the next question
+        txtQuestionText.clear();
+        updateDynamicOptions(type);
+    }
+
+    private void loadExistingQuestions(String surveyName) {
+        currentQuestions.clear();
+
+        MongoDatabase db = MongoManager.connect();
+        if (db == null) return;
+
+        try {
+            MongoCollection<Document> collection = db.getCollection("surveys");
+            Document surveyDoc = collection.find(Filters.eq("name", surveyName)).first();
+
+            if (surveyDoc != null && surveyDoc.containsKey("questions")) {
+                @SuppressWarnings("unchecked")
+                List<Document> questionDocs = (List<Document>) surveyDoc.get("questions");
+
+                for (Document qDoc : questionDocs) {
+                    // Reconstruct the Question object from the MongoDB Document
+                    List<String> options = qDoc.containsKey("options") ? (List<String>) qDoc.get("options") : new ArrayList<>();
+
+                    Question q = new Question(
+                            qDoc.getString("id"),
+                            qDoc.getString("text"),
+                            qDoc.getString("type"),
+                            options
+                    );
+                    currentQuestions.add(q);
+
+                    // Update the counter to ensure new IDs don't conflict
+                    if (qDoc.getString("id") != null && qDoc.getString("id").startsWith("Q")) {
+                        try {
+                            int num = Integer.parseInt(qDoc.getString("id").substring(1));
+                            if (num > questionCounter) {
+                                questionCounter = num;
+                            }
+                        } catch (NumberFormatException e) {
+                            // Ignore non-numeric IDs, rely on UUID fallback later if needed
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Error loading existing questions: " + e.getMessage());
+        }
+    }
+
+    private void redrawQuestionsList() {
+        vboxQuestionsList.getChildren().clear();
+
+        if (currentQuestions.isEmpty()) {
+            vboxQuestionsList.getChildren().add(new Label("No questions defined yet. Use the panel above to add one."));
+            return;
+        }
+
+        for (int i = 0; i < currentQuestions.size(); i++) {
+            Question q = currentQuestions.get(i);
+
+            // Create a styled VBox for each question
+            VBox questionBox = new VBox(5);
+            questionBox.setStyle("-fx-border-color: #ccc; -fx-padding: 10px; -fx-background-color: #f9f9f9;");
+
+            // Question Header (Q#, Text)
+            Label header = new Label(String.format("%d. %s (%s)", (i + 1), q.getText(), q.getType()));
+            header.setStyle("-fx-font-weight: bold;");
+
+            // Options Display (if applicable)
+            VBox optionsBox = new VBox(2);
+            if (!q.getOptions().isEmpty()) {
+                optionsBox.getChildren().add(new Label("Options:"));
+                for (String option : q.getOptions()) {
+                    optionsBox.getChildren().add(new Label("  - " + option));
+                }
+            }
+
+            // Control Buttons (Delete)
+            Button btnDelete = new Button("Delete");
+            btnDelete.getStyleClass().add("delete-button"); // For potential CSS styling later
+            btnDelete.setOnAction(e -> handleDeleteQuestion(q)); // Pass the question object to delete
+
+            HBox controlBox = new HBox(10, btnDelete);
+            controlBox.setAlignment(javafx.geometry.Pos.CENTER_RIGHT);
+
+            questionBox.getChildren().addAll(header, optionsBox, controlBox);
+            vboxQuestionsList.getChildren().add(questionBox);
+        }
     }
 
     // Placeholder for saving the questions
     @FXML
     private void handleSaveQuestions() {
-        currentQuestions.add(new Question("Q1", "How satisfied are you?", "RATING", null));
-        currentQuestions.add(new Question("Q2", "What is your gender?", "SINGLE_CHOICE", List.of("Male", "Female", "Other")));
         // 1. Convert the Java List<Question> into a List<Document> for MongoDB
         List<Document> questionDocs = new ArrayList<>();
         for (Question q : currentQuestions) {
@@ -113,6 +281,12 @@ public class QuestionBuilderController {
             System.err.println("MongoDB Question Save Error: " + e.getMessage());
             return false;
         }
+    }
+
+    private void handleDeleteQuestion(Question q) {
+        currentQuestions.remove(q);
+        redrawQuestionsList(); // Refresh the UI
+        System.out.println("Deleted question: " + q.getText());
     }
 
     private void closeWindow() {
