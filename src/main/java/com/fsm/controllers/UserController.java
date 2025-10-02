@@ -131,11 +131,40 @@ public class UserController {
     }
 
     private void handleEditUser() {
-        User selectedUser = userTable.getSelectionModel().getSelectedItem();
-        if (selectedUser != null) {
-            System.out.println("Edit User: " + selectedUser.getUsername());
-        } else {
-            System.out.println("No user selected for editing.");
+        // Note: Use the fully qualified name for the inner class
+        UserController.User selectedUser = userTable.getSelectionModel().getSelectedItem();
+
+        if (selectedUser == null) {
+            // Use the same warning as delete if nothing is selected
+            Alert alert = new Alert(AlertType.WARNING);
+            alert.setTitle("No Selection");
+            alert.setHeaderText("No User Selected");
+            alert.setContentText("Please select a user from the table to edit.");
+            alert.showAndWait();
+            return;
+        }
+
+        try {
+            FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/fsm/add-user-form.fxml"));
+            Parent root = loader.load();
+
+            AddUserController editController = loader.getController();
+
+            // CRITICAL STEP: Pass the selected user data to the controller for editing
+            // The initData method will handle pre-filling the form.
+            editController.initData(this, selectedUser);
+
+            // Create the new modal stage (window)
+            Stage stage = new Stage();
+            stage.setTitle("Edit User: " + selectedUser.getUsername()); // Set dynamic title
+            stage.initModality(Modality.APPLICATION_MODAL);
+
+            stage.setScene(new Scene(root));
+            stage.showAndWait(); // Wait until the form is closed
+
+        } catch (IOException e) {
+            e.printStackTrace();
+            System.err.println("Error loading Edit User form: " + e.getMessage());
         }
     }
 
