@@ -46,17 +46,19 @@ public class LoginController {
                 FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/fsm/main-dashboard-view.fxml"));
                 Parent root = loader.load();
 
-                // 3. (Optional) Pass data to the dashboard controller if needed
-                // MainDashboardController dashboardController = loader.getController();
-                // dashboardController.initData(authenticatedUser);
+                // 3. Get the controller instance to call a method on it
+                MainDashboardController dashboardController = loader.getController();
 
                 // 4. Set up the new scene and stage
                 Stage mainStage = new Stage();
                 mainStage.setTitle("Field Survey Manager - Dashboard");
                 mainStage.setScene(new Scene(root, 800, 600)); // Larger size for dashboard
-                mainStage.show();
 
-                // 5. Close the login window
+                // 5. CRITICAL: Load the default Surveys view *before* showing the stage.
+                dashboardController.loadDefaultView();
+
+                // 6. Show the main stage and close the login stage
+                mainStage.show();
                 loginStage.close();
 
             } catch (IOException e) {
