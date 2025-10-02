@@ -148,10 +148,37 @@ public class SurveyController {
 
     private void handleEditSurvey() {
         Survey selectedSurvey = surveyTable.getSelectionModel().getSelectedItem();
-        if (selectedSurvey != null) {
-            System.out.println("Edit Survey: " + selectedSurvey.getName());
-        } else {
-            System.out.println("No survey selected for editing.");
+
+        if (selectedSurvey == null) {
+            // Use the same warning as delete if nothing is selected
+            Alert alert = new Alert(AlertType.WARNING);
+            alert.setTitle("No Selection");
+            alert.setHeaderText("No Survey Selected");
+            alert.setContentText("Please select a survey from the table to edit.");
+            alert.showAndWait();
+            return;
+        }
+
+        try {
+            FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/fsm/add-survey-form.fxml"));
+            Parent root = loader.load();
+
+            AddSurveyController editController = loader.getController();
+
+            // CRITICAL STEP: Pass the selected survey data to the controller
+            editController.initData(this, selectedSurvey);
+
+            // Create the new modal stage (window)
+            Stage stage = new Stage();
+            stage.setTitle("Edit Survey: " + selectedSurvey.getName()); // Set dynamic title
+            stage.initModality(Modality.APPLICATION_MODAL);
+
+            stage.setScene(new Scene(root));
+            stage.showAndWait(); // Wait until the form is closed
+
+        } catch (IOException e) {
+            e.printStackTrace();
+            System.err.println("Error loading Edit Survey form: " + e.getMessage());
         }
     }
 

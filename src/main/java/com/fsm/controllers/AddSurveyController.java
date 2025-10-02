@@ -11,6 +11,10 @@ import javafx.scene.control.ComboBox;
 import javafx.scene.control.Button;
 import javafx.stage.Stage;
 
+import com.mongodb.client.model.Filters;
+import com.mongodb.client.model.Updates;
+import static com.fsm.controllers.SurveyController.Survey;
+
 public class AddSurveyController {
 
     @FXML private TextField txtSurveyName;
@@ -22,6 +26,8 @@ public class AddSurveyController {
     // An interface to communicate back to the main SurveyController
     private SurveyController parentController;
 
+    private String originalSurveyName;
+
     @FXML
     public void initialize() {
         // Initialize the status ComboBox options
@@ -30,6 +36,26 @@ public class AddSurveyController {
 
         btnSave.setOnAction(e -> handleSave());
         btnCancel.setOnAction(e -> handleCancel());
+    }
+
+    public void initData(SurveyController parent, Survey surveyToEdit) {
+        this.parentController = parent;
+
+        // If a survey is passed, enter EDIT mode
+        if (surveyToEdit != null) {
+            this.originalSurveyName = surveyToEdit.getName();
+
+            // 1. Pre-fill the form fields
+            txtSurveyName.setText(surveyToEdit.getName());
+            cmbStatus.setValue(surveyToEdit.getStatus());
+            txtNumQuestions.setText(String.valueOf(surveyToEdit.getQuestions()));
+
+            // 2. Change the window title (in the next step's FXML loading)
+            btnSave.setText("Update Survey");
+        } else {
+            // If null, it's ADD mode (existing logic still applies)
+            this.parentController = parent;
+        }
     }
 
     // Method to be called by SurveyController to set the parent reference
@@ -41,14 +67,11 @@ public class AddSurveyController {
         String name = txtSurveyName.getText().trim();
         String status = cmbStatus.getValue();
 
-        // Basic validation for the name field
         if (name.isEmpty()) {
-            // In a real app, display an error label on the form
             System.err.println("Error: Survey Name cannot be empty.");
             return;
         }
 
-        // Attempt to parse the number of questions, defaulting to 0 on error
         int numQuestions = 0;
         try {
             numQuestions = Integer.parseInt(txtNumQuestions.getText().trim());
@@ -56,24 +79,58 @@ public class AddSurveyController {
             System.err.println("Warning: Invalid number of questions entered. Defaulting to 0.");
         }
 
-        // 1. Create the MongoDB Document
-        Document surveyDoc = new Document()
-                .append("name", name)
-                .append("status", status)
-                .append("numQuestions", numQuestions)
-                .append("dateCreated", new java.util.Date());
-
-        // 2. Insert into the Database
-        if (insertSurveyIntoMongo(surveyDoc)) {
-            System.out.println("Survey saved successfully: " + name);
-
-            // 3. Notify the parent to refresh the table
-            if (parentController != null) {
-                parentController.refreshTable();
+        // Check if we are in EDIT mode or ADD mode
+        if (originalSurveyName != null) {
+            // EDIT MODE
+            if (updateSurveyInMongo(name, status, numQuestions)) {
+                System.out.println("Survey updated successfully: " + name);
             }
+        } else {
+            // ADD MODE (Keep the existing logic)
+            Document surveyDoc = new Document()
+                    .append("name", name)
+                    .append("status", status)
+                    .append("numQuestions", numQuestions)
+                    .append("dateCreated", new java.util.Date());
 
-            // 4. Close the modal window
-            closeWindow();
+            if (insertSurveyIntoMongo(surveyDoc)) {
+                System.out.println("Survey saved successfully: " + name);
+            }
+        }
+
+        // Final steps are the same for both
+        if (parentController != null) {
+            parentController.refreshTable();
+        }
+        closeWindow();
+    }
+
+    private boolean updateSurveyInMongo(String newName, String newStatus, int newNumQuestions) {
+        MongoDatabase db = MongoManager.connect();
+        if (db == null) {
+            System.err.println("FATAL: Cannot connect to DB to update survey.");
+            return false;
+        }
+        try {
+            MongoCollection<Document> collection = db.getCollection("surveys");
+
+            // 1. Define the filter (find the document by its ORIGINAL name)
+            org.bson.conversions.Bson filter = Filters.eq("name", originalSurveyName);
+
+            // 2. Define the updates
+            org.bson.conversions.Bson updates = Updates.combine(
+                    Updates.set("name", newName),
+                    Updates.set("status", newStatus),
+                    Updates.set("numQuestions", newNumQuestions)
+            );
+
+            // 3. Perform the update
+            collection.updateOne(filter, updates);
+
+            return true;
+        } catch (Exception e) {
+            System.err.println("MongoDB Update Error: " + e.getMessage());
+            return false;
         }
     }
 
