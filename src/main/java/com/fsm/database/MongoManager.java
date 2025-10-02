@@ -7,6 +7,10 @@ import com.mongodb.client.MongoCollection;
 import com.mongodb.client.model.Filters;
 import org.bson.Document;
 
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.nio.charset.StandardCharsets;
+
 public class MongoManager {
 
     private static final String CONNECTION_STRING = "mongodb://localhost:27017/";
@@ -59,6 +63,29 @@ public class MongoManager {
         } catch (Exception e) {
             System.err.println("Database query error during authentication: " + e.getMessage());
             return null;
+        }
+    }
+
+    public static String hashPassword(String password) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] encodedhash = digest.digest(
+                    password.getBytes(StandardCharsets.UTF_8));
+
+            // Convert byte array to hex string
+            StringBuilder hexString = new StringBuilder(2 * encodedhash.length);
+            for (byte b : encodedhash) {
+                String hex = Integer.toHexString(0xff & b);
+                if(hex.length() == 1) {
+                    hexString.append('0');
+                }
+                hexString.append(hex);
+            }
+            return hexString.toString();
+
+        } catch (NoSuchAlgorithmException e) {
+            System.err.println("FATAL: SHA-256 algorithm not found: " + e.getMessage());
+            return null; // Should not happen in modern Java
         }
     }
 }

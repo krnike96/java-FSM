@@ -15,6 +15,12 @@ import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.beans.property.SimpleStringProperty;
 
+import javafx.fxml.FXMLLoader;
+import javafx.scene.Parent;
+import javafx.scene.Scene;
+import javafx.stage.Modality;
+import javafx.stage.Stage;
+import java.io.IOException;
 
 public class UserController {
 
@@ -96,7 +102,26 @@ public class UserController {
     // --- Placeholder Button Handlers ---
 
     private void handleAddUser() {
-        System.out.println("Add User button clicked. (TODO)");
+        try {
+            FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/fsm/add-user-form.fxml"));
+            Parent root = loader.load();
+
+            // Get the controller and pass a reference to THIS controller
+            AddUserController addController = loader.getController();
+            addController.setParentController(this);
+
+            // Create the new modal stage (window)
+            Stage stage = new Stage();
+            stage.setTitle("Add New User");
+            stage.initModality(Modality.APPLICATION_MODAL);
+
+            stage.setScene(new Scene(root));
+            stage.showAndWait(); // Wait until the form is closed
+
+        } catch (IOException e) {
+            e.printStackTrace();
+            System.err.println("Error loading Add User form: " + e.getMessage());
+        }
     }
 
     private void handleEditUser() {
