@@ -22,6 +22,12 @@ import javafx.stage.Modality;
 import javafx.stage.Stage;
 import java.io.IOException;
 
+import javafx.scene.control.Alert;
+import javafx.scene.control.Alert.AlertType;
+import javafx.scene.control.ButtonType;
+import com.mongodb.client.model.Filters;
+import java.util.Optional;
+
 public class UserController {
 
     public static class User {
@@ -134,11 +140,75 @@ public class UserController {
     }
 
     private void handleDeleteUser() {
-        User selectedUser = userTable.getSelectionModel().getSelectedItem();
-        if (selectedUser != null) {
-            System.out.println("Delete User: " + selectedUser.getUsername());
-        } else {
-            System.out.println("No user selected for deletion.");
+        // Note: We must use the fully qualified name for the inner class
+        UserController.User selectedUser = userTable.getSelectionModel().getSelectedItem();
+
+        if (selectedUser == null) {
+            Alert alert = new Alert(AlertType.WARNING);
+            alert.setTitle("No Selection");
+            alert.setHeaderText("No User Selected");
+            alert.setContentText("Please select a user from the table to delete.");
+            alert.showAndWait();
+            return;
+        }
+
+        // Safety Check: Prevent deleting the primary admin account (or logged-in user)
+        if (selectedUser.getUsername().equalsIgnoreCase("admin")) {
+            Alert alert = new Alert(AlertType.ERROR);
+            alert.setTitle("Deletion Denied");
+            alert.setHeaderText("Cannot Delete Administrator");
+            alert.setContentText("The primary 'admin' account cannot be deleted.");
+            alert.showAndWait();
+            return;
+        }
+
+        // 1. Show Confirmation Dialog
+        Alert confirmAlert = new Alert(AlertType.CONFIRMATION);
+        confirmAlert.setTitle("Confirm Deletion");
+        confirmAlert.setHeaderText("Permanently Delete User: " + selectedUser.getUsername() + "?");
+        confirmAlert.setContentText("Are you sure you want to delete this user? This action cannot be undone.");
+
+        Optional<ButtonType> result = confirmAlert.showAndWait();
+
+        if (result.isPresent() && result.get() == ButtonType.OK) {
+            // 2. Perform MongoDB Deletion
+            if (deleteUserFromMongo(selectedUser.getUsername())) {
+                // 3. Refresh the Table
+                refreshTable();
+                System.out.println("SUCCESS: User deleted: " + selectedUser.getUsername());
+            } else {
+                // Display error if DB operation fails
+                Alert errorAlert = new Alert(AlertType.ERROR);
+                errorAlert.setTitle("Deletion Failed");
+                errorAlert.setHeaderText("Database Error");
+                errorAlert.setContentText("Failed to delete user from the database.");
+                errorAlert.showAndWait();
+            }
+        }
+    }
+
+    /**
+     * Executes the MongoDB delete operation.
+     * @param username The username of the user to delete.
+     * @return true if deletion was successful, false otherwise.
+     */
+    private boolean deleteUserFromMongo(String username) {
+        MongoDatabase db = MongoManager.connect();
+        if (db == null) {
+            return false; // Connection failed
+        }
+
+        try {
+            MongoCollection<Document> collection = db.getCollection("users");
+
+            // Delete the document where the 'username' field matches
+            collection.deleteOne(Filters.eq("username", username));
+
+            return true;
+
+        } catch (MongoException e) {
+            System.err.println("MongoDB Delete Error: " + e.getMessage());
+            return false;
         }
     }
 }
