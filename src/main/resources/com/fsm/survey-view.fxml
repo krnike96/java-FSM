@@ -20,6 +20,7 @@
         <Button fx:id="btnAdd" text="Add New Survey" />
         <Button fx:id="btnEdit" text="Edit Selected" />
         <Button fx:id="btnDelete" text="Delete Selected" />
+        <Button fx:id="btnManageQuestions" text="Manage Questions" />
     </HBox>
 
     <TableView fx:id="surveyTable" VBox.vgrow="ALWAYS">

@@ -68,6 +68,7 @@ public class SurveyController {
     @FXML private Button btnAdd;
     @FXML private Button btnEdit;
     @FXML private Button btnDelete;
+    @FXML private Button btnManageQuestions;
 
     // Use the nested Survey class
     private final ObservableList<Survey> masterData = FXCollections.observableArrayList();
@@ -86,6 +87,7 @@ public class SurveyController {
         btnAdd.setOnAction(event -> handleAddSurvey());
         btnEdit.setOnAction(event -> handleEditSurvey());
         btnDelete.setOnAction(event -> handleDeleteSurvey());
+        btnManageQuestions.setOnAction(event -> handleManageQuestions());
     }
 
     private void loadSurveyData() {
@@ -244,6 +246,47 @@ public class SurveyController {
         } catch (MongoException e) {
             System.err.println("MongoDB Delete Error: " + e.getMessage());
             return false;
+        }
+    }
+
+    private void handleManageQuestions() {
+        SurveyController.Survey selectedSurvey = surveyTable.getSelectionModel().getSelectedItem();
+
+        if (selectedSurvey == null) {
+            Alert alert = new Alert(AlertType.WARNING);
+            alert.setTitle("No Selection");
+            alert.setHeaderText("No Survey Selected");
+            alert.setContentText("Please select a survey to manage its questions.");
+            alert.showAndWait();
+            return;
+        }
+
+        // Pass the selected survey to the new Question Builder Controller
+        // We will implement loadQuestionBuilderModal in the next step
+        loadQuestionBuilderModal(selectedSurvey);
+    }
+
+
+    private void loadQuestionBuilderModal(SurveyController.Survey survey) {
+        try {
+            FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/fsm/question-builder-view.fxml"));
+            Parent root = loader.load();
+
+            QuestionBuilderController builderController = loader.getController();
+
+            // Pass the selected survey object and the parent controller reference
+            builderController.initData(this, survey);
+
+            Stage stage = new Stage();
+            stage.setTitle("Question Builder: " + survey.getName());
+            stage.initModality(Modality.APPLICATION_MODAL);
+
+            stage.setScene(new Scene(root));
+            stage.showAndWait();
+
+        } catch (IOException e) {
+            e.printStackTrace();
+            System.err.println("Error loading Question Builder form: " + e.getMessage());
         }
     }
 
