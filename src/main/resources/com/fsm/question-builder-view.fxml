@@ -21,7 +21,7 @@
     </VBox>
 
     <HBox alignment="CENTER_RIGHT" spacing="10.0">
-        <Button fx:id="btnSave" text="Save and Close" onAction="#handleSaveQuestions" />
-        <Button fx:id="btnCancel" text="Cancel" />
+        <Button fx:id="btnSave" text="Save and Close" onAction="#handleSaveQuestions" defaultButton="true"/>
+        <Button fx:id="btnCancel" text="Cancel" cancelButton="true"/>
     </HBox>
 </VBox>
