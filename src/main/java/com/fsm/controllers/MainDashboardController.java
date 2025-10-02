@@ -27,15 +27,14 @@ public class MainDashboardController {
     // You can use an initialize method to set up the initial view or load data
     @FXML
     public void initialize() {
-        // Load the default view (e.g., a simple Welcome screen) into the center
+        // Load the Surveys view immediately when the dashboard opens (or keep welcome)
         loadWelcomeView();
-        // Load the Surveys view immediately when the dashboard opens
         loadView("/com/fsm/survey-view.fxml");
 
-        // Set up button handlers to call the dynamic loader
+        // Update button handlers for Users
         btnSurveys.setOnAction(event -> loadView("/com/fsm/survey-view.fxml"));
-        btnUsers.setOnAction(event -> loadView("Users")); // Placeholder for now
-        btnReports.setOnAction(event -> loadView("Reports")); // Placeholder for now
+        btnUsers.setOnAction(event -> loadView("/com/fsm/user-view.fxml")); // CRITICAL: Updated path
+        btnReports.setOnAction(event -> loadView("Reports"));
         // ... and so on
     }
 
@@ -54,7 +53,8 @@ public class MainDashboardController {
      * Placeholder method to demonstrate loading content dynamically.
      */
     private void loadView(String fxmlPath) {
-        if (fxmlPath.equals("Users") || fxmlPath.equals("Reports")) {
+        // Update this check to only use placeholder for Reports/Settings
+        if (fxmlPath.equals("Reports") || fxmlPath.equals("Settings")) {
             // Placeholder logic for non-existent FXML files
             Label contentLabel = new Label("Loading " + fxmlPath + " Screen...");
             rootPane.setCenter(new VBox(20, contentLabel));
@@ -67,7 +67,6 @@ public class MainDashboardController {
             rootPane.setCenter(view);
         } catch (IOException e) {
             e.printStackTrace();
-            // Display error in the center pane if the FXML can't be found
             rootPane.setCenter(new Label("Error: Could not load view from " + fxmlPath));
         }
     }
