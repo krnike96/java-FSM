@@ -23,6 +23,12 @@ import javafx.stage.Modality;
 import javafx.stage.Stage;
 import java.io.IOException;
 
+import javafx.scene.control.Alert;
+import javafx.scene.control.Alert.AlertType;
+import javafx.scene.control.ButtonType;
+import com.mongodb.client.model.Filters;
+import java.util.Optional;
+
 // Note: No class declaration here
 
 public class SurveyController {
@@ -151,10 +157,66 @@ public class SurveyController {
 
     private void handleDeleteSurvey() {
         Survey selectedSurvey = surveyTable.getSelectionModel().getSelectedItem();
-        if (selectedSurvey != null) {
-            System.out.println("Delete Survey: " + selectedSurvey.getName());
-        } else {
-            System.out.println("No survey selected for deletion.");
+
+        if (selectedSurvey == null) {
+            // Show a simple warning if nothing is selected
+            Alert alert = new Alert(AlertType.WARNING);
+            alert.setTitle("No Selection");
+            alert.setHeaderText("No Survey Selected");
+            alert.setContentText("Please select a survey from the table to delete.");
+            alert.showAndWait();
+            return;
+        }
+
+        // 1. Show Confirmation Dialog
+        Alert confirmAlert = new Alert(AlertType.CONFIRMATION);
+        confirmAlert.setTitle("Confirm Deletion");
+        confirmAlert.setHeaderText("Permanently Delete Survey?");
+        confirmAlert.setContentText("Are you sure you want to delete the survey: " + selectedSurvey.getName() + "? This cannot be undone.");
+
+        Optional<ButtonType> result = confirmAlert.showAndWait();
+
+        if (result.isPresent() && result.get() == ButtonType.OK) {
+            // 2. Perform MongoDB Deletion
+            if (deleteSurveyFromMongo(selectedSurvey.getName())) {
+                // 3. Refresh the Table
+                refreshTable();
+                System.out.println("SUCCESS: Survey deleted: " + selectedSurvey.getName());
+            } else {
+                // Display error if DB operation fails
+                Alert errorAlert = new Alert(AlertType.ERROR);
+                errorAlert.setTitle("Deletion Failed");
+                errorAlert.setHeaderText("Database Error");
+                errorAlert.setContentText("Failed to delete survey from the database.");
+                errorAlert.showAndWait();
+            }
+        }
+    }
+
+    /**
+     * Executes the MongoDB delete operation.
+     * @param surveyName The name (unique identifier) of the survey to delete.
+     * @return true if deletion was successful, false otherwise.
+     */
+    private boolean deleteSurveyFromMongo(String surveyName) {
+        MongoDatabase db = MongoManager.connect();
+        if (db == null) {
+            return false; // Connection failed
+        }
+
+        try {
+            MongoCollection<Document> collection = db.getCollection("surveys");
+
+            // Delete the document where the 'name' field matches the selected survey's name
+            collection.deleteOne(Filters.eq("name", surveyName));
+
+            // Note: For production, you would use a unique ID (like _id) for deletion,
+            // but using 'name' works for now since it's unique in our test data.
+            return true;
+
+        } catch (MongoException e) {
+            System.err.println("MongoDB Delete Error: " + e.getMessage());
+            return false;
         }
     }
 
