@@ -10,17 +10,19 @@ import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
-import javafx.scene.control.Button;
-import javafx.scene.control.Label;
-import javafx.scene.control.TableColumn;
-import javafx.scene.control.TableView;
+import javafx.scene.control.*;
+import javafx.scene.control.Alert.AlertType;
 import javafx.scene.layout.AnchorPane;
-import javafx.scene.layout.VBox;
+import javafx.stage.FileChooser;
+import javafx.stage.Stage;
 import org.bson.Document;
 import org.bson.types.ObjectId;
-import javafx.event.ActionEvent; // <--- ADDED THIS IMPORT
+import javafx.event.ActionEvent;
 
+import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
+import java.io.PrintWriter;
 import java.util.*;
 
 public class DetailedReportController {
@@ -28,9 +30,14 @@ public class DetailedReportController {
     @FXML private Label lblSurveyName;
     @FXML private TableView<Map<String, String>> responseTable;
     @FXML private Button btnBack;
+    @FXML private Button btnExport; // New FXML binding for the export button
 
     private String surveyId;
     private String surveyName;
+
+    // Data storage for the export functionality
+    private List<String> columnKeys = new ArrayList<>(); // Stores the Question IDs/Keys ("Timestamp", "q1", etc.)
+    private ObservableList<Map<String, String>> tableData = FXCollections.observableArrayList();
 
     @FXML
     public void initialize() {
@@ -56,6 +63,8 @@ public class DetailedReportController {
 
         responseTable.getColumns().clear();
         responseTable.getItems().clear();
+        columnKeys.clear();
+        tableData.clear();
 
         try {
             // 1. Fetch the survey structure to get the question list
@@ -77,6 +86,10 @@ public class DetailedReportController {
                 questionMap.put(q.getString("id"), q.getString("text"));
             }
 
+            // Store the list of keys (IDs) for CSV generation
+            columnKeys.addAll(questionMap.keySet());
+
+
             // 2. Dynamically create TableColumns
             for (Map.Entry<String, String> entry : questionMap.entrySet()) {
                 String colId = entry.getKey();
@@ -89,7 +102,8 @@ public class DetailedReportController {
                     String value = data.getValue().getOrDefault(colId, "N/A");
                     // Format arrays (multi-choice) into a readable string
                     if (value.startsWith("[") && value.endsWith("]")) {
-                        value = value.substring(1, value.length() - 1);
+                        // Remove brackets and trim whitespace for CSV friendly format
+                        value = value.substring(1, value.length() - 1).trim();
                     }
                     return new SimpleStringProperty(value);
                 });
@@ -129,7 +143,9 @@ public class DetailedReportController {
                 tableRows.add(row);
             }
 
-            responseTable.setItems(tableRows);
+            // Store data for export and set to table
+            tableData = tableRows;
+            responseTable.setItems(tableData);
 
         } catch (Exception e) {
             System.err.println("Error loading detailed report data: " + e.getMessage());
@@ -137,8 +153,111 @@ public class DetailedReportController {
         }
     }
 
+    /**
+     * Handles the action to export the detailed response data to a CSV file.
+     */
     @FXML
-    private void handleBack(ActionEvent event) { // <--- Event type is now recognized
+    private void handleExportCsv() {
+        if (tableData.isEmpty()) {
+            showAlert(AlertType.INFORMATION, "Export Failed", "No responses available to export.");
+            return;
+        }
+
+        // 1. Get the current Stage for the file chooser
+        Stage stage = (Stage) btnExport.getScene().getWindow();
+
+        // 2. Configure and show the FileChooser
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Save Survey Responses");
+        fileChooser.setInitialFileName(surveyName.replaceAll("[^a-zA-Z0-9\\s]", "") + "_Responses.csv");
+        fileChooser.getExtensionFilters().add(
+                new FileChooser.ExtensionFilter("CSV files (*.csv)", "*.csv")
+        );
+
+        File file = fileChooser.showSaveDialog(stage);
+
+        if (file != null) {
+            try (PrintWriter writer = new PrintWriter(new FileWriter(file))) {
+
+                // --- 3. Write CSV Headers ---
+                StringBuilder headerLine = new StringBuilder();
+                List<String> headers = new ArrayList<>();
+                // Use columnKeys to ensure correct order
+                for (String key : columnKeys) {
+                    // Find the corresponding header text from the TableColumns
+                    for (TableColumn<Map<String, String>, ?> col : responseTable.getColumns()) {
+                        if (col.getText().equals("Submission Date") && key.equals("Timestamp")) {
+                            headers.add("\"Submission Date\"");
+                            break;
+                        }
+                        // This uses the actual question text as the header
+                        if (col.getText() != null && col.getText().length() > 0) {
+                            // Find the column that uses the current key/ID
+                            // Since we didn't store a key->header map, we rely on the order/text comparison.
+                            // However, the column keys (qIds) are unique. Let's rely on the questionMap logic
+                            // or simply use the column names from the TableView itself for guaranteed display accuracy.
+                            // A safer approach is to reconstruct the header list using the visible columns:
+                            if (col.getText() != null) {
+                                headers.add("\"" + col.getText().replace("\"", "\"\"") + "\"");
+                            }
+                        }
+                    }
+                }
+
+                // Re-creating header list correctly based on columnKeys and questionMap logic
+                // A simpler, more robust approach is to iterate over the columns' display names.
+                List<String> displayHeaders = new ArrayList<>();
+                for (TableColumn<Map<String, String>, ?> col : responseTable.getColumns()) {
+                    // Ensure the header text itself is properly quoted for CSV
+                    displayHeaders.add("\"" + col.getText().replace("\"", "\"\"") + "\"");
+                }
+
+                writer.println(String.join(",", displayHeaders));
+
+                // --- 4. Write CSV Data Rows ---
+                for (Map<String, String> rowData : tableData) {
+                    StringBuilder dataLine = new StringBuilder();
+                    boolean first = true;
+
+                    // Iterate using the columnKeys list to maintain column order
+                    for (String key : columnKeys) {
+                        if (!first) {
+                            dataLine.append(",");
+                        }
+                        String value = rowData.getOrDefault(key, "");
+
+                        // Sanitize value: escape double quotes and enclose in quotes
+                        String quotedValue = "\"" + value.replace("\"", "\"\"") + "\"";
+                        dataLine.append(quotedValue);
+                        first = false;
+                    }
+                    writer.println(dataLine.toString());
+                }
+
+                showAlert(AlertType.INFORMATION, "Export Successful",
+                        "Responses exported successfully to:\n" + file.getAbsolutePath());
+
+            } catch (IOException e) {
+                System.err.println("Error writing CSV file: " + e.getMessage());
+                showAlert(AlertType.ERROR, "Export Failed",
+                        "Could not write the file: " + e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Utility method to display alerts.
+     */
+    private void showAlert(AlertType type, String title, String content) {
+        Alert alert = new Alert(type);
+        alert.setTitle(title);
+        alert.setHeaderText(null);
+        alert.setContentText(content);
+        alert.showAndWait();
+    }
+
+    @FXML
+    private void handleBack(ActionEvent event) {
         // Go back to the Survey Summary Report (ReportController)
         try {
             FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/fsm/report-view.fxml"));

@@ -14,11 +14,19 @@ import javafx.scene.layout.AnchorPane;
 import javafx.scene.Parent;
 import javafx.event.ActionEvent;
 
+// Imports for CSV Export
+import javafx.stage.FileChooser;
+import javafx.stage.FileChooser.ExtensionFilter;
+import javafx.stage.Stage;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.BufferedWriter;
+import java.io.IOException;
+
 import org.bson.Document;
 import org.bson.conversions.Bson;
 import org.bson.types.ObjectId;
 
-import java.io.IOException;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -26,6 +34,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 public class ReportController {
 
@@ -72,6 +81,8 @@ public class ReportController {
     @FXML private TableColumn<ReportSurvey, String> colDateCreated;
     @FXML private TableColumn<ReportSurvey, Integer> colTotalResponses;
     @FXML private Button btnViewDetails;
+    // NEW: Inject the Export button
+    @FXML private Button btnExportCSV;
 
     @FXML private AnchorPane reportContainer;
 
@@ -82,14 +93,11 @@ public class ReportController {
 
     /**
      * Initializes the controller with the logged-in user's role and username.
-     * This is called by MainDashboardController before the view is displayed.
      */
     public void initData(String userRole, String username) {
         this.currentUserRole = userRole;
         this.currentUsername = username;
-        // --- NEW LOGGING ADDED ---
         System.out.println("INIT_DATA: Received Role: " + userRole + ", Username: " + username);
-        // --- END NEW LOGGING ---
         // Load data only after user information is set
         loadReportData();
     }
@@ -100,10 +108,7 @@ public class ReportController {
         colSurveyName.setCellValueFactory(new PropertyValueFactory<>("name"));
         colStatus.setCellValueFactory(new PropertyValueFactory<>("status"));
         colQuestions.setCellValueFactory(new PropertyValueFactory<>("numQuestions"));
-
-        // FIX: Corrected typo in setCellValueFactory for colDateCreated
         colDateCreated.setCellValueFactory(new PropertyValueFactory<>("dateCreated"));
-
         colTotalResponses.setCellValueFactory(new PropertyValueFactory<>("totalResponses"));
 
         // 2. Set the data source
@@ -111,13 +116,102 @@ public class ReportController {
 
         // Disable detail button until a survey is selected
         btnViewDetails.setDisable(true);
+        // NEW: Disable export button until data is loaded
+        // It will be re-enabled in loadReportData if data exists
+        if (btnExportCSV != null) {
+            btnExportCSV.setDisable(true);
+        }
 
         surveyReportTable.getSelectionModel().selectedItemProperty().addListener((obs, oldVal, newVal) -> {
             btnViewDetails.setDisable(newVal == null);
         });
-
-        // NOTE: loadReportData() is now called from initData(role, username)
     }
+
+    /**
+     * Helper method to show an alert dialog.
+     */
+    private void showAlert(Alert.AlertType type, String title, String message) {
+        Alert alert = new Alert(type);
+        alert.setTitle(title);
+        alert.setHeaderText(null);
+        alert.setContentText(message);
+        alert.showAndWait();
+    }
+
+    // --- NEW: CSV Export Implementation ---
+
+    /**
+     * Handles the 'Export to CSV' button click.
+     * Prompts the user for a save location and exports the current table data.
+     */
+    @FXML
+    private void handleExportToCSV(ActionEvent event) {
+        if (reportData.isEmpty()) {
+            showAlert(Alert.AlertType.INFORMATION, "Export Failed", "The report table is empty. Nothing to export.");
+            return;
+        }
+
+        // Use the event source to get the primary Stage
+        Stage stage = (Stage) ((Button) event.getSource()).getScene().getWindow();
+
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Save Survey Summary Report");
+        // Set default filename
+        fileChooser.setInitialFileName("Survey_Summary_Report.csv");
+        // Set extension filter
+        fileChooser.getExtensionFilters().add(
+                new ExtensionFilter("CSV Files (*.csv)", "*.csv"));
+
+        // Show save file dialog
+        File file = fileChooser.showSaveDialog(stage);
+
+        if (file != null) {
+            boolean success = writeDataToCSV(file);
+            if (success) {
+                showAlert(Alert.AlertType.INFORMATION, "Export Successful",
+                        "Report successfully saved to:\n" + file.getAbsolutePath());
+            } else {
+                showAlert(Alert.AlertType.ERROR, "Export Failed",
+                        "An error occurred while writing the file. Check console for details.");
+            }
+        }
+    }
+
+    /**
+     * Writes the ReportSurvey data into a CSV file.
+     * @param file The file handle to write to.
+     * @return true if successful, false otherwise.
+     */
+    private boolean writeDataToCSV(File file) {
+        // Headers corresponding to the ReportSurvey properties
+        String header = "Survey ID,Survey Name,Status,Number of Questions,Date Created,Total Responses\n";
+
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
+            writer.write(header);
+
+            for (ReportSurvey survey : reportData) {
+                // Manually construct the CSV line, ensuring double quotes around string fields for safety
+                String line = String.format("\"%s\",\"%s\",\"%s\",%d,%s,%d\n",
+                        survey.getId(),
+                        survey.getName(),
+                        survey.getStatus(),
+                        survey.getNumQuestions(),
+                        survey.getDateCreated(),
+                        survey.getTotalResponses()
+                );
+                writer.write(line);
+            }
+            return true;
+
+        } catch (IOException e) {
+            System.err.println("Error writing CSV file: " + e.getMessage());
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    // --- End NEW: CSV Export Implementation ---
+
 
     private Map<String, Integer> getSurveyResponseCounts(MongoDatabase db) {
         Map<String, Integer> counts = new HashMap<>();
@@ -132,10 +226,14 @@ public class ReportController {
 
         try {
             responseCollection.aggregate(pipeline).forEach(doc -> {
-                ObjectId surveyId = doc.getObjectId("_id");
-                Integer count = doc.getInteger("count");
-                if (surveyId != null && count != null) {
-                    counts.put(surveyId.toHexString(), count);
+                // Ensure ObjectId is handled correctly when coming from aggregation
+                Object idObject = doc.get("_id");
+                if (idObject instanceof ObjectId) {
+                    ObjectId surveyId = (ObjectId) idObject;
+                    Integer count = doc.getInteger("count");
+                    if (surveyId != null && count != null) {
+                        counts.put(surveyId.toHexString(), count);
+                    }
                 }
             });
         } catch (Exception e) {
@@ -152,25 +250,23 @@ public class ReportController {
 
         if (db == null) {
             System.err.println("Database connection failed. Cannot load report data.");
+            if (btnExportCSV != null) btnExportCSV.setDisable(true); // Ensure disabled on failure
             return;
         }
 
-        // --- NEW LOGGING ADDED ---
         System.out.println("INFO: Database connection established successfully for reports.");
-        // --- END NEW LOGGING ---
 
         // --- RBAC Logic for Reports ---
-        Bson filter = new Document(); // Default: empty filter (shows all)
+        Bson filter; // Default: empty filter (shows all)
 
         // Only restrict access if the user is explicitly a Survey Creator
         if ("Survey Creator".equals(currentUserRole) && currentUsername != null) {
             // Creators can only see surveys they created.
-            // Using a case-insensitive regex filter to account for potential case mismatches
             filter = Filters.regex("creator", "^" + currentUsername + "$", "i");
             System.out.println("✅ Report RBAC: Creator Filter Applied (Case-Insensitive Regex). User: " + currentUsername + ", Filter: " + filter.toString());
         } else {
-            // FIX: If the role is NOT "Survey Creator" (i.e., Administrator, etc.), show all.
-            filter = new Document(); // Ensure filter is empty for Admin to see all
+            // If the role is NOT "Survey Creator" (i.e., Administrator, Data Entry), show all surveys.
+            filter = new Document();
             System.out.println("✅ Report RBAC: Showing ALL surveys. Role: " + currentUserRole);
         }
         // --- End RBAC Logic ---
@@ -180,12 +276,8 @@ public class ReportController {
 
             MongoCollection<Document> surveyCollection = db.getCollection("surveys");
 
-            // Apply the RBAC filter to the find operation
             int documentsFound = 0;
             for (Document doc : surveyCollection.find(filter)) {
-                // --- NEW LOGGING ADDED ---
-                System.out.println("DEBUG: Found and processing survey: " + doc.getString("name"));
-                // --- END NEW LOGGING ---
                 documentsFound++;
 
                 String surveyId = doc.getObjectId("_id").toHexString();
@@ -208,18 +300,21 @@ public class ReportController {
                 reportData.add(report);
             }
 
-            // --- NEW LOGGING ADDED ---
             if (documentsFound == 0) {
                 System.out.println("⚠️ WARNING: MongoDB query executed successfully but returned zero survey documents.");
             }
-            // --- END NEW LOGGING ---
 
-
-            // Report final count
+            // Enable or disable the export button based on the loaded data
+            if (btnExportCSV != null) {
+                btnExportCSV.setDisable(reportData.isEmpty());
+            }
             System.out.println("INFO: Loaded " + reportData.size() + " reports for user '" + currentUsername + "'.");
 
         } catch (Exception e) {
             System.err.println("Error loading report data: " + e.getMessage());
+            if (btnExportCSV != null) {
+                btnExportCSV.setDisable(true);
+            }
         }
     }
 
@@ -254,6 +349,7 @@ public class ReportController {
         } catch (IOException e) {
             System.err.println("Failed to load detailed report view: " + e.getMessage());
             e.printStackTrace();
+            showAlert(Alert.AlertType.ERROR, "View Error", "Failed to load the detailed report screen.");
         }
     }
 }

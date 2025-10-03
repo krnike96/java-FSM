@@ -9,6 +9,7 @@
 <?import javafx.scene.control.Button?>
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.AnchorPane?>
+<?import javafx.scene.control.Tooltip?>
 
 <AnchorPane prefHeight="700.0" prefWidth="900.0" style="-fx-background-color: #f7f7f7;" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.fsm.controllers.ReportController">
     <children>
@@ -34,9 +35,20 @@
                         <TableView fx:constant="CONSTRAINED_RESIZE_POLICY" />
                     </columnResizePolicy>
                 </TableView>
-                <HBox alignment="CENTER_RIGHT" prefHeight="30.0" prefWidth="860.0">
+                <HBox alignment="CENTER_RIGHT" prefHeight="30.0" prefWidth="860.0" spacing="10.0">
                     <children>
-                        <Button fx:id="btnViewDetails" mnemonicParsing="false" onAction="#handleViewDetails" style="-fx-background-color: #007bff; -fx-text-fill: white; -fx-padding: 10 20;" text="View Detailed Responses" />
+                        <!-- NEW: Export to CSV Button -->
+                        <Button fx:id="btnExportCSV" mnemonicParsing="false" onAction="#handleExportToCSV" style="-fx-background-color: #28a745; -fx-text-fill: white; -fx-padding: 10 20;" text="Export to CSV">
+                            <tooltip>
+                                <Tooltip text="Export the current summary table data to a CSV file." />
+                            </tooltip>
+                        </Button>
+
+                        <Button fx:id="btnViewDetails" mnemonicParsing="false" onAction="#handleViewDetails" style="-fx-background-color: #007bff; -fx-text-fill: white; -fx-padding: 10 20;" text="View Detailed Responses">
+                            <tooltip>
+                                <Tooltip text="View all individual responses for the selected survey." />
+                            </tooltip>
+                        </Button>
                     </children>
                 </HBox>
             </children>

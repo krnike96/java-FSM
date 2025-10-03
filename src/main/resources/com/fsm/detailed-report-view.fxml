@@ -16,6 +16,12 @@
                 <HBox alignment="CENTER_LEFT" prefHeight="40.0" prefWidth="200.0">
                     <children>
                         <Button fx:id="btnBack" mnemonicParsing="false" onAction="#handleBack" style="-fx-background-color: #6c757d; -fx-text-fill: white; -fx-padding: 8 15;" text="&lt; Back to Summary" />
+                        <!-- New Export Button -->
+                        <Button fx:id="btnExport" mnemonicParsing="false" onAction="#handleExportCsv" style="-fx-background-color: #28a745; -fx-text-fill: white; -fx-padding: 8 15;" text="Export to CSV">
+                            <HBox.margin>
+                                <Insets left="15.0" />
+                            </HBox.margin>
+                        </Button>
                     </children>
                     <VBox.margin>
                         <Insets top="15.0" />
