@@ -69,7 +69,7 @@ public class AddSurveyController {
             System.err.println("Error: Survey Name cannot be empty.");
             return;
         }
-        
+
         // Check if we are in EDIT mode or ADD mode
         if (originalSurveyName != null) {
             // EDIT MODE

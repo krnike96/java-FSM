@@ -26,22 +26,79 @@ public class MainDashboardController {
     @FXML private Button btnSettings;
     @FXML private AnchorPane mainContentArea;
 
+    private String currentUserRole;
+
     // You can use an initialize method to set up the initial view or load data
     @FXML
     public void initialize() {
-        // 1. Load the WELCOME view as the initial content by using loadView's logic.
-        loadWelcomeView(); // Call the updated method
-
         // 2. Setup button handlers.
-        btnSurveys.setOnAction(event -> loadView("/com/fsm/survey-view.fxml"));
+        // CRITICAL FIX: Use the dedicated loadSurveyView to pass the role
+        btnSurveys.setOnAction(event -> loadSurveyView());
+
         btnUsers.setOnAction(event -> loadView("/com/fsm/user-view.fxml"));
         btnReports.setOnAction(e -> loadView("/com/fsm/report-view.fxml"));
         btnSettings.setOnAction(e -> loadView(null)); // Use null to show "Coming Soon"
     }
 
-    private void loadWelcomeView() {
-        // --- NO LONGER USES rootPane.setCenter() ---
+    public void initData(String userRole) {
+        this.currentUserRole = userRole;
+        applyRoleRestrictions();
+    }
 
+    /**
+     * Checks the user's role and disables unauthorized navigation buttons.
+     */
+    private void applyRoleRestrictions() {
+        // We will use visibility to hide unauthorized buttons for a cleaner UI
+        boolean isAdmin = "Administrator".equals(currentUserRole);
+
+        // REPORTS and SETTINGS are restricted to Administrator
+        btnReports.setVisible(isAdmin);
+        btnReports.setDisable(!isAdmin); // Disable just in case it's still visible
+
+        btnSettings.setVisible(isAdmin);
+        btnSettings.setDisable(!isAdmin);
+    }
+
+    // CRITICAL NEW METHOD: Loads Survey view and initializes it with the user's role
+    private void loadSurveyView() {
+        try {
+            // 1. Load the FXML resource
+            FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/fsm/survey-view.fxml"));
+            Parent view = loader.load();
+
+            // Get the SurveyController instance
+            SurveyController surveyController = loader.getController();
+
+            // CRITICAL STEP: Pass the role to the survey controller for button restriction
+            if (surveyController != null && currentUserRole != null) {
+                surveyController.initData(this.currentUserRole);
+            }
+
+            // 2. Clear previous content
+            mainContentArea.getChildren().clear();
+
+            // 3. Add the new view
+            mainContentArea.getChildren().add(view);
+
+            // 4. Anchor the new view to fill the entire AnchorPane (important!)
+            AnchorPane.setTopAnchor(view, 0.0);
+            AnchorPane.setBottomAnchor(view, 0.0);
+            AnchorPane.setLeftAnchor(view, 0.0);
+            AnchorPane.setRightAnchor(view, 0.0);
+
+        } catch (IOException e) {
+            System.err.println("Error loading Survey view: " + e.getMessage());
+            e.printStackTrace();
+
+            // Display user-friendly error
+            mainContentArea.getChildren().clear();
+            mainContentArea.getChildren().add(new Label("Error: Could not load Survey Management screen."));
+        }
+    }
+
+
+    private void loadWelcomeView() {
         VBox welcomeBox = new VBox(20);
         welcomeBox.setStyle("-fx-alignment: center;");
         Label welcomeLabel = new Label("Select an option from the sidebar to begin managing data.");
@@ -61,11 +118,12 @@ public class MainDashboardController {
 
     public void loadDefaultView() {
         // We want the Surveys view to load first, not the welcome message.
-        loadView("/com/fsm/survey-view.fxml");
+        loadSurveyView();
     }
 
     /**
      * Placeholder method to demonstrate loading content dynamically.
+     * Used for Users, Reports, and Settings views.
      */
     private void loadView(String fxmlPath) {
         if (fxmlPath == null) {

@@ -29,14 +29,10 @@ import javafx.scene.control.ButtonType;
 import com.mongodb.client.model.Filters;
 import java.util.Optional;
 
-// Note: No class declaration here
-
 public class SurveyController {
 
     // -----------------------------------------------------------
-    // FIX: Nested Model Class
-    // The model must be a static class nested *inside* the controller
-    // to be placed in the same file without the "public class in separate file" error.
+    // Nested Model Class
     // -----------------------------------------------------------
     public static class Survey {
         private String name;
@@ -70,8 +66,44 @@ public class SurveyController {
     @FXML private Button btnDelete;
     @FXML private Button btnManageQuestions;
 
-    // Use the nested Survey class
     private final ObservableList<Survey> masterData = FXCollections.observableArrayList();
+
+    /**
+     * CRITICAL: New method called by MainDashboardController to set up RBAC
+     * and then load the data.
+     * @param userRole The role of the currently logged-in user.
+     */
+    public void initData(String userRole) {
+        // 1. Apply Role-Based Access Control
+        applyRoleRestrictions(userRole);
+
+        // 2. Load the data (now called here instead of initialize)
+        loadSurveyData();
+    }
+
+    /**
+     * Hides or disables modification buttons for unauthorized users.
+     */
+    private void applyRoleRestrictions(String userRole) {
+        // Only Administrators and Survey Creators can modify surveys.
+        boolean canModify = "Administrator".equals(userRole) || "Survey Creator".equals(userRole);
+
+        if (!canModify) {
+            // Non-admin/non-creator roles (like Data Entry) lose all modification rights.
+            btnAdd.setDisable(true);
+            btnEdit.setDisable(true);
+            btnDelete.setDisable(true);
+            btnManageQuestions.setDisable(true);
+
+            // Optionally, you can also hide them for a cleaner UI:
+            // btnAdd.setVisible(false);
+            // btnEdit.setVisible(false);
+            // btnDelete.setVisible(false);
+            // btnManageQuestions.setVisible(false);
+            System.out.println("Survey view: Modification buttons disabled for role: " + userRole);
+        }
+    }
+
 
     @FXML
     public void initialize() {
@@ -80,19 +112,19 @@ public class SurveyController {
         colStatus.setCellValueFactory(cellData -> new SimpleStringProperty(cellData.getValue().getStatus()));
         colQuestions.setCellValueFactory(cellData -> new SimpleIntegerProperty(cellData.getValue().getQuestions()).asObject());
 
-        // 2. Load data from MongoDB
-        loadSurveyData();
-
-        // 3. Set up button actions
+        // 2. Set up button actions
         btnAdd.setOnAction(event -> handleAddSurvey());
         btnEdit.setOnAction(event -> handleEditSurvey());
         btnDelete.setOnAction(event -> handleDeleteSurvey());
         btnManageQuestions.setOnAction(event -> handleManageQuestions());
+
+        // NOTE: loadSurveyData() is removed from here and moved to initData()
     }
 
     private void loadSurveyData() {
         masterData.clear();
         MongoDatabase db = MongoManager.connect();
+        surveyTable.setItems(masterData); // Set the empty list immediately
 
         if (db == null) {
             System.err.println("Database connection failed. Cannot load survey data.");
@@ -110,8 +142,6 @@ public class SurveyController {
                 masterData.add(new Survey(name, status, numQuestions));
             }
 
-            surveyTable.setItems(masterData);
-
         } catch (MongoException e) {
             System.err.println("Error loading survey data from MongoDB: " + e.getMessage());
         } catch (Exception e) {
@@ -119,7 +149,7 @@ public class SurveyController {
         }
     }
 
-    // --- Button Handlers ---
+    // --- Button Handlers (Unchanged) ---
 
     private void handleAddSurvey() {
         try {
@@ -239,8 +269,6 @@ public class SurveyController {
             // Delete the document where the 'name' field matches the selected survey's name
             collection.deleteOne(Filters.eq("name", surveyName));
 
-            // Note: For production, you would use a unique ID (like _id) for deletion,
-            // but using 'name' works for now since it's unique in our test data.
             return true;
 
         } catch (MongoException e) {
@@ -261,8 +289,6 @@ public class SurveyController {
             return;
         }
 
-        // Pass the selected survey to the new Question Builder Controller
-        // We will implement loadQuestionBuilderModal in the next step
         loadQuestionBuilderModal(selectedSurvey);
     }
 
@@ -272,6 +298,7 @@ public class SurveyController {
             FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/fsm/question-builder-view.fxml"));
             Parent root = loader.load();
 
+            // NOTE: Assuming you have a QuestionBuilderController class
             QuestionBuilderController builderController = loader.getController();
 
             // Pass the selected survey object and the parent controller reference

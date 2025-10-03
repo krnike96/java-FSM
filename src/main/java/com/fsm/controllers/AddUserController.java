@@ -84,18 +84,19 @@ public class AddUserController {
                 return;
             }
         } else {
-            // =================== ADD MODE (Original Logic) ===================
+            // =================== ADD MODE ===================
             if (rawPassword.isEmpty()) {
                 System.err.println("Error: Password cannot be empty when adding a new user.");
                 return;
             }
 
+            // CRITICAL FIX: Call the secure hashPassword method
             String hashedPassword = MongoManager.hashPassword(rawPassword);
             if (hashedPassword == null) return;
 
             Document userDoc = new Document()
                     .append("username", newUsername)
-                    .append("password", hashedPassword)
+                    .append("password", hashedPassword) // Store the BCrypt hash
                     .append("role", newRole);
 
             if (!insertUserIntoMongo(userDoc)) {
@@ -135,6 +136,7 @@ public class AddUserController {
             // 3. Conditional Password Update
             // ONLY update password if the rawPassword field is NOT empty
             if (rawPassword != null && !rawPassword.trim().isEmpty()) {
+                // CRITICAL FIX: Hash the new password before updating
                 String newHashedPassword = MongoManager.hashPassword(rawPassword);
                 if (newHashedPassword != null) {
                     // Combine the existing updates with the password update

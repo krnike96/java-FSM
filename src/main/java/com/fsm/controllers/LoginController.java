@@ -39,6 +39,9 @@ public class LoginController {
         if (authenticatedUser != null) {
             // SUCCESS: Load the Main Dashboard
             try {
+                // CRITICAL STEP 1: Get the user's role from the authenticated document
+                String userRole = authenticatedUser.getString("role"); // Assuming the field name is "role"
+
                 // 1. Get the current stage (login window)
                 Stage loginStage = (Stage)((Node) event.getSource()).getScene().getWindow();
 
@@ -46,15 +49,19 @@ public class LoginController {
                 FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/fsm/main-dashboard-view.fxml"));
                 Parent root = loader.load();
 
-                // 3. Get the controller instance to call a method on it
+                // 3. Get the controller instance
                 MainDashboardController dashboardController = loader.getController();
+
+                // CRITICAL STEP 2: Pass the role data to the dashboard controller
+                dashboardController.initData(userRole);
 
                 // 4. Set up the new scene and stage
                 Stage mainStage = new Stage();
                 mainStage.setTitle("Field Survey Manager - Dashboard");
-                mainStage.setScene(new Scene(root, 800, 600)); // Larger size for dashboard
+                mainStage.setScene(new Scene(root, 800, 600));
 
-                // 5. CRITICAL: Load the default Surveys view *before* showing the stage.
+                // 5. Load the default Surveys view *after* role restrictions are applied.
+                // Note: initData() applies restrictions, but we still need to load the first view.
                 dashboardController.loadDefaultView();
 
                 // 6. Show the main stage and close the login stage

@@ -6,10 +6,7 @@ import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.model.Filters;
 import org.bson.Document;
-
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.nio.charset.StandardCharsets;
+import org.mindrot.jbcrypt.BCrypt;
 
 public class MongoManager {
 
@@ -32,9 +29,21 @@ public class MongoManager {
     }
 
     /**
-     * Authenticates a user against the 'users' collection using exact match for username and password.
+     * Hashes a plain text password using BCrypt (Salted and slow for security).
+     * @param password The plain text password.
+     * @return The BCrypt hashed password string.
+     */
+    public static String hashPassword(String password) {
+        if (password == null) return null;
+        // Generate a salt and hash the password in one step
+        return BCrypt.hashpw(password, BCrypt.gensalt());
+    }
+
+    /**
+     * Authenticates a user against the 'users' collection by verifying the plain password
+     * against the stored BCrypt hash.
      * @param username The username entered by the user.
-     * @param password The password entered by the user.
+     * @param password The password entered by the user (plain text).
      * @return A Document representing the user if login is successful, or null otherwise.
      */
     public static Document authenticateUser(String username, String password) {
@@ -47,45 +56,27 @@ public class MongoManager {
         try {
             MongoCollection<Document> userCollection = db.getCollection("users");
 
-            // Build a filter to find a user where both fields match
-            Document user = userCollection.find(Filters.and(
-                    Filters.eq("username", username),
-                    Filters.eq("password", password)
-            )).first(); // .first() returns the first match or null
+            // STEP 1: Find user by username only
+            Document userDoc = userCollection.find(Filters.eq("username", username)).first();
 
-            if (user != null) {
-                System.out.println("✅ Login Successful for user: " + username);
-            } else {
-                System.out.println("❌ Login Failed: Invalid credentials for user: " + username);
+            if (userDoc != null) {
+                String storedHashedPassword = userDoc.getString("password");
+
+                // STEP 2: CRITICAL FIX: Use BCrypt.checkpw to safely compare the plain password
+                // with the stored hash.
+                if (BCrypt.checkpw(password, storedHashedPassword)) {
+                    System.out.println("✅ Login Successful for user: " + username);
+                    return userDoc; // Authentication successful
+                }
             }
-            return user;
+
+            // If user is null or password verification failed:
+            System.out.println("❌ Login Failed: Invalid credentials for user: " + username);
+            return null;
 
         } catch (Exception e) {
             System.err.println("Database query error during authentication: " + e.getMessage());
             return null;
-        }
-    }
-
-    public static String hashPassword(String password) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] encodedhash = digest.digest(
-                    password.getBytes(StandardCharsets.UTF_8));
-
-            // Convert byte array to hex string
-            StringBuilder hexString = new StringBuilder(2 * encodedhash.length);
-            for (byte b : encodedhash) {
-                String hex = Integer.toHexString(0xff & b);
-                if(hex.length() == 1) {
-                    hexString.append('0');
-                }
-                hexString.append(hex);
-            }
-            return hexString.toString();
-
-        } catch (NoSuchAlgorithmException e) {
-            System.err.println("FATAL: SHA-256 algorithm not found: " + e.getMessage());
-            return null; // Should not happen in modern Java
         }
     }
 }
