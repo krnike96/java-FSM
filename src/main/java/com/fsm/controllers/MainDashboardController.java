@@ -35,7 +35,9 @@ public class MainDashboardController {
         // CRITICAL FIX: Use the dedicated loadSurveyView to pass the role
         btnSurveys.setOnAction(event -> loadSurveyView());
 
-        btnUsers.setOnAction(event -> loadView("/com/fsm/user-view.fxml"));
+        // We will call the dedicated loadUserView to apply restrictions inside that controller
+        btnUsers.setOnAction(event -> loadUserView());
+
         btnReports.setOnAction(e -> loadView("/com/fsm/report-view.fxml"));
         btnSettings.setOnAction(e -> loadView(null)); // Use null to show "Coming Soon"
     }
@@ -52,12 +54,63 @@ public class MainDashboardController {
         // We will use visibility to hide unauthorized buttons for a cleaner UI
         boolean isAdmin = "Administrator".equals(currentUserRole);
 
-        // REPORTS and SETTINGS are restricted to Administrator
+        // USERS, REPORTS, and SETTINGS are restricted to Administrator
+        btnUsers.setVisible(isAdmin);
+        btnUsers.setDisable(!isAdmin);
+
         btnReports.setVisible(isAdmin);
         btnReports.setDisable(!isAdmin); // Disable just in case it's still visible
 
         btnSettings.setVisible(isAdmin);
         btnSettings.setDisable(!isAdmin);
+    }
+
+    // NEW METHOD: Loads User view and initializes it with the user's role
+    private void loadUserView() {
+        try {
+            // Only proceed with loading the view if the button is NOT disabled by RBAC
+            if (btnUsers.isDisable()) {
+                System.out.println("Access Denied: Non-administrator attempted to access User Management.");
+                return;
+            }
+
+            // 1. Load the FXML resource
+            FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/fsm/user-view.fxml"));
+            Parent view = loader.load();
+
+            // Get the UserController instance
+            UserController userController = loader.getController();
+
+            // CRITICAL STEP: Pass the role to the user controller for *internal* button restriction
+            if (userController != null && currentUserRole != null) {
+                // Assuming UserController has an initData method like SurveyController
+                userController.initData(this.currentUserRole);
+            }
+
+            // 2. Clear previous content
+            mainContentArea.getChildren().clear();
+
+            // 3. Add the new view
+            mainContentArea.getChildren().add(view);
+
+            // 4. Anchor the new view to fill the entire AnchorPane (important!)
+            AnchorPane.setTopAnchor(view, 0.0);
+            AnchorPane.setBottomAnchor(view, 0.0);
+            AnchorPane.setLeftAnchor(view, 0.0);
+            AnchorPane.setRightAnchor(view, 0.0);
+
+        } catch (IOException e) {
+            System.err.println("Error loading User view: " + e.getMessage());
+            e.printStackTrace();
+
+            // Display user-friendly error
+            mainContentArea.getChildren().clear();
+            mainContentArea.getChildren().add(new Label("Error: Could not load User Management screen."));
+        } catch (Exception e) {
+            // Handle potential issues if UserController is missing or initData is not implemented yet
+            System.err.println("General error during User View load: " + e.getMessage());
+            loadView("/com/fsm/user-view.fxml"); // Fallback to generic load
+        }
     }
 
     // CRITICAL NEW METHOD: Loads Survey view and initializes it with the user's role
@@ -123,7 +176,7 @@ public class MainDashboardController {
 
     /**
      * Placeholder method to demonstrate loading content dynamically.
-     * Used for Users, Reports, and Settings views.
+     * Used for Reports and Settings views, and as a fallback for Users.
      */
     private void loadView(String fxmlPath) {
         if (fxmlPath == null) {
@@ -137,6 +190,9 @@ public class MainDashboardController {
             // 1. Load the FXML resource
             FXMLLoader loader = new FXMLLoader(getClass().getResource(fxmlPath));
             Parent view = loader.load();
+
+            // NOTE: If this loadView is called for UserController, it won't pass the role.
+            // We use the dedicated loadUserView() now for better control.
 
             // 2. Clear previous content
             mainContentArea.getChildren().clear();

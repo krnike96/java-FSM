@@ -57,16 +57,49 @@ public class UserController {
 
     private final ObservableList<User> masterData = FXCollections.observableArrayList();
 
+    // Field to store the user's role
+    private String currentUserRole;
+
+    /**
+     * CRITICAL: New method called by MainDashboardController to set up RBAC
+     * and then load the data.
+     * @param userRole The role of the currently logged-in user.
+     */
+    public void initData(String userRole) {
+        this.currentUserRole = userRole;
+        // 1. Apply Role-Based Access Control to the buttons
+        applyRoleRestrictions();
+
+        // 2. Load the data
+        loadUserData();
+    }
+
+    /**
+     * Hides or disables modification buttons for non-administrator users.
+     */
+    private void applyRoleRestrictions() {
+        // Only Administrators can modify users.
+        boolean isAdmin = "Administrator".equals(currentUserRole);
+
+        if (!isAdmin) {
+            // Disable all modification buttons for security
+            btnAddUser.setDisable(true);
+            btnEditUser.setDisable(true);
+            btnDeleteUser.setDisable(true);
+
+            System.out.println("User view: Modification buttons disabled for role: " + currentUserRole);
+        }
+    }
+
     @FXML
     public void initialize() {
         // 1. Link the model properties to the TableView columns
         colUsername.setCellValueFactory(cellData -> new SimpleStringProperty(cellData.getValue().getUsername()));
         colRole.setCellValueFactory(cellData -> new SimpleStringProperty(cellData.getValue().getRole()));
 
-        // 2. Load data from MongoDB
-        loadUserData();
+        // NOTE: loadUserData() is removed from here and moved to initData()
 
-        // 3. Set up button handlers (placeholders for now)
+        // 2. Set up button handlers
         btnAddUser.setOnAction(event -> handleAddUser());
         btnEditUser.setOnAction(event -> handleEditUser());
         btnDeleteUser.setOnAction(event -> handleDeleteUser());
@@ -79,6 +112,7 @@ public class UserController {
     private void loadUserData() {
         masterData.clear();
         MongoDatabase db = MongoManager.connect();
+        userTable.setItems(masterData); // Set empty list immediately
 
         if (db == null) {
             System.err.println("Database connection failed. Cannot load user data.");
@@ -96,8 +130,6 @@ public class UserController {
                 masterData.add(new User(username, role));
             }
 
-            userTable.setItems(masterData);
-
         } catch (MongoException e) {
             System.err.println("Error loading user data from MongoDB: " + e.getMessage());
         } catch (Exception e) {
@@ -105,9 +137,16 @@ public class UserController {
         }
     }
 
-    // --- Placeholder Button Handlers ---
+    // --- Button Handlers ---
 
     private void handleAddUser() {
+        // Double check for Admin access at the handler level for maximum security
+        if (!"Administrator".equals(currentUserRole)) {
+            Alert deniedAlert = new Alert(AlertType.ERROR, "Access Denied: Only Administrators can add users.", ButtonType.OK);
+            deniedAlert.showAndWait();
+            return;
+        }
+
         try {
             FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/fsm/add-user-form.fxml"));
             Parent root = loader.load();
@@ -131,6 +170,13 @@ public class UserController {
     }
 
     private void handleEditUser() {
+        // Double check for Admin access at the handler level for maximum security
+        if (!"Administrator".equals(currentUserRole)) {
+            Alert deniedAlert = new Alert(AlertType.ERROR, "Access Denied: Only Administrators can edit users.", ButtonType.OK);
+            deniedAlert.showAndWait();
+            return;
+        }
+
         // Note: Use the fully qualified name for the inner class
         UserController.User selectedUser = userTable.getSelectionModel().getSelectedItem();
 
@@ -169,6 +215,13 @@ public class UserController {
     }
 
     private void handleDeleteUser() {
+        // Double check for Admin access at the handler level for maximum security
+        if (!"Administrator".equals(currentUserRole)) {
+            Alert deniedAlert = new Alert(AlertType.ERROR, "Access Denied: Only Administrators can delete users.", ButtonType.OK);
+            deniedAlert.showAndWait();
+            return;
+        }
+
         // Note: We must use the fully qualified name for the inner class
         UserController.User selectedUser = userTable.getSelectionModel().getSelectedItem();
 
