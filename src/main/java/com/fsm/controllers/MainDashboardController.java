@@ -1,6 +1,6 @@
 package com.fsm.controllers;
 
-import com.fsm.database.MongoManager; // We may need this later for data fetching
+import com.fsm.database.MongoManager;
 import javafx.fxml.FXML;
 import javafx.scene.control.Button;
 import javafx.scene.layout.BorderPane;
@@ -32,8 +32,8 @@ public class MainDashboardController {
     @FXML
     public void initialize() {
         // 2. Setup button handlers.
-        // CRITICAL FIX: Use the dedicated loadSurveyView to pass the role
-        btnSurveys.setOnAction(event -> loadSurveyView());
+        // CRITICAL FIX: Use the dedicated decision method to load the correct view based on role
+        btnSurveys.setOnAction(event -> loadSurveyDecisionView());
 
         // We will call the dedicated loadUserView to apply restrictions inside that controller
         btnUsers.setOnAction(event -> loadUserView());
@@ -65,73 +65,63 @@ public class MainDashboardController {
         btnSettings.setDisable(!isAdmin);
     }
 
-    // NEW METHOD: Loads User view and initializes it with the user's role
-    private void loadUserView() {
-        try {
-            // Only proceed with loading the view if the button is NOT disabled by RBAC
-            if (btnUsers.isDisable()) {
-                System.out.println("Access Denied: Non-administrator attempted to access User Management.");
-                return;
-            }
-
-            // 1. Load the FXML resource
-            FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/fsm/user-view.fxml"));
-            Parent view = loader.load();
-
-            // Get the UserController instance
-            UserController userController = loader.getController();
-
-            // CRITICAL STEP: Pass the role to the user controller for *internal* button restriction
-            if (userController != null && currentUserRole != null) {
-                // Assuming UserController has an initData method like SurveyController
-                userController.initData(this.currentUserRole);
-            }
-
-            // 2. Clear previous content
-            mainContentArea.getChildren().clear();
-
-            // 3. Add the new view
-            mainContentArea.getChildren().add(view);
-
-            // 4. Anchor the new view to fill the entire AnchorPane (important!)
-            AnchorPane.setTopAnchor(view, 0.0);
-            AnchorPane.setBottomAnchor(view, 0.0);
-            AnchorPane.setLeftAnchor(view, 0.0);
-            AnchorPane.setRightAnchor(view, 0.0);
-
-        } catch (IOException e) {
-            System.err.println("Error loading User view: " + e.getMessage());
-            e.printStackTrace();
-
-            // Display user-friendly error
-            mainContentArea.getChildren().clear();
-            mainContentArea.getChildren().add(new Label("Error: Could not load User Management screen."));
-        } catch (Exception e) {
-            // Handle potential issues if UserController is missing or initData is not implemented yet
-            System.err.println("General error during User View load: " + e.getMessage());
-            loadView("/com/fsm/user-view.fxml"); // Fallback to generic load
+    /**
+     * Determines which 'Surveys' view to load based on the user's role.
+     * This replaces the old loadSurveyView() method.
+     */
+    private void loadSurveyDecisionView() {
+        // Data Entry users get the survey taking interface.
+        if ("Data Entry".equals(currentUserRole)) {
+            // We load the SurveyTakerController, which will also need the user's role
+            // for the submission logic (tracking who submitted the response).
+            loadViewWithRole("/com/fsm/survey-taker-view.fxml", "SurveyTakerController");
+        } else {
+            // Admins and Survey Creators get the management interface.
+            loadViewWithRole("/com/fsm/survey-view.fxml", "SurveyController");
         }
     }
 
-    // CRITICAL NEW METHOD: Loads Survey view and initializes it with the user's role
-    private void loadSurveyView() {
+
+    // NEW METHOD: Loads User view and initializes it with the user's role
+    private void loadUserView() {
+        // Only proceed with loading the view if the button is NOT disabled by RBAC
+        if (btnUsers.isDisable()) {
+            System.out.println("Access Denied: Non-administrator attempted to access User Management.");
+            return;
+        }
+
+        loadViewWithRole("/com/fsm/user-view.fxml", "UserController");
+    }
+
+    /**
+     * A unified method for loading FXML views and initializing their controllers
+     * with the current user role.
+     * @param fxmlPath The path to the FXML file.
+     * @param controllerTypeHint Optional hint for the controller class name (e.g., "SurveyController").
+     */
+    private void loadViewWithRole(String fxmlPath, String controllerTypeHint) {
         try {
             // 1. Load the FXML resource
-            FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/fsm/survey-view.fxml"));
+            FXMLLoader loader = new FXMLLoader(getClass().getResource(fxmlPath));
             Parent view = loader.load();
 
-            // Get the SurveyController instance
-            SurveyController surveyController = loader.getController();
+            // 2. Pass the role to the controller if it's a known type
+            Object controller = loader.getController();
 
-            // CRITICAL STEP: Pass the role to the survey controller for button restriction
-            if (surveyController != null && currentUserRole != null) {
-                surveyController.initData(this.currentUserRole);
+            if (controller != null && currentUserRole != null) {
+                if ("SurveyController".equals(controllerTypeHint)) {
+                    ((SurveyController) controller).initData(this.currentUserRole);
+                } else if ("UserController".equals(controllerTypeHint)) {
+                    ((UserController) controller).initData(this.currentUserRole);
+                } else if ("SurveyTakerController".equals(controllerTypeHint)) {
+                    // We need to pass the role and potentially the username to the new controller
+                    // for tracking who submits the response.
+                    ((SurveyTakerController) controller).initData(this.currentUserRole);
+                }
             }
 
-            // 2. Clear previous content
+            // 3. Clear previous content and add the new view
             mainContentArea.getChildren().clear();
-
-            // 3. Add the new view
             mainContentArea.getChildren().add(view);
 
             // 4. Anchor the new view to fill the entire AnchorPane (important!)
@@ -141,13 +131,16 @@ public class MainDashboardController {
             AnchorPane.setRightAnchor(view, 0.0);
 
         } catch (IOException e) {
-            System.err.println("Error loading Survey view: " + e.getMessage());
+            System.err.println("Error loading FXML view: " + fxmlPath + ". " + e.getMessage());
             e.printStackTrace();
-
-            // Display user-friendly error
             mainContentArea.getChildren().clear();
-            mainContentArea.getChildren().add(new Label("Error: Could not load Survey Management screen."));
+            mainContentArea.getChildren().add(new Label("Error: Could not load screen from " + fxmlPath));
         }
+    }
+
+    // The legacy loadSurveyView is now replaced by loadSurveyDecisionView
+    private void loadSurveyView() {
+        loadSurveyDecisionView();
     }
 
 
@@ -170,8 +163,8 @@ public class MainDashboardController {
     }
 
     public void loadDefaultView() {
-        // We want the Surveys view to load first, not the welcome message.
-        loadSurveyView();
+        // Load the appropriate survey view on startup based on the role
+        loadSurveyDecisionView();
     }
 
     /**
@@ -186,33 +179,7 @@ public class MainDashboardController {
             return;
         }
 
-        try {
-            // 1. Load the FXML resource
-            FXMLLoader loader = new FXMLLoader(getClass().getResource(fxmlPath));
-            Parent view = loader.load();
-
-            // NOTE: If this loadView is called for UserController, it won't pass the role.
-            // We use the dedicated loadUserView() now for better control.
-
-            // 2. Clear previous content
-            mainContentArea.getChildren().clear();
-
-            // 3. Add the new view
-            mainContentArea.getChildren().add(view);
-
-            // 4. Anchor the new view to fill the entire AnchorPane (important!)
-            AnchorPane.setTopAnchor(view, 0.0);
-            AnchorPane.setBottomAnchor(view, 0.0);
-            AnchorPane.setLeftAnchor(view, 0.0);
-            AnchorPane.setRightAnchor(view, 0.0);
-
-        } catch (IOException e) {
-            System.err.println("Error loading FXML view: " + fxmlPath);
-            e.printStackTrace();
-
-            // Display user-friendly error
-            mainContentArea.getChildren().clear();
-            mainContentArea.getChildren().add(new Label("Error: Could not load screen from " + fxmlPath));
-        }
+        // Use the unified loading method for generic paths
+        loadViewWithRole(fxmlPath, null);
     }
 }

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.ComboBox?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ScrollPane?>
+<?import javafx.scene.layout.AnchorPane?>
+<?import javafx.scene.layout.VBox?>
+<?import javafx.scene.text.Font?>
+
+<AnchorPane prefHeight="600.0" prefWidth="800.0" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.fsm.controllers.SurveyTakerController">
+    <children>
+        <VBox alignment="TOP_CENTER" layoutX="10.0" layoutY="10.0" prefHeight="200.0" prefWidth="100.0" spacing="15.0" AnchorPane.bottomAnchor="0.0" AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0" AnchorPane.topAnchor="0.0">
+            <children>
+                <Label text="Survey Data Entry Interface">
+                    <font>
+                        <Font name="System Bold" size="24.0" />
+                    </font>
+                </Label>
+                <Label fx:id="lblUsername" text="Logged in as: [User Role]" />
+                <VBox alignment="CENTER_LEFT" maxWidth="600.0" prefWidth="600.0" spacing="5.0">
+                    <children>
+                        <Label text="Select Survey:" />
+                        <ComboBox fx:id="cmbSurveySelector" prefWidth="300.0" promptText="Choose a survey to begin" />
+                    </children>
+                </VBox>
+                <ScrollPane fx:id="questionScrollPane" fitToWidth="true" VBox.vgrow="ALWAYS">
+                    <content>
+                        <VBox fx:id="questionsContainer" maxWidth="600.0" minWidth="600.0" prefWidth="600.0" spacing="20.0" style="-fx-padding: 20;" />
+                    </content>
+                </ScrollPane>
+                <Button fx:id="btnSubmit" mnemonicParsing="false" onAction="#handleSubmit" text="Submit Survey Response" disable="true" />
+            </children>
+        </VBox>
+    </children>
+</AnchorPane>
