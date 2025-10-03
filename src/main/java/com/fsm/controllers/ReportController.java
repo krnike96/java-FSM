@@ -32,12 +32,12 @@ public class ReportController {
         private static final DateTimeFormatter DATE_FORMAT =
                 DateTimeFormatter.ofPattern("yyyy-MM-dd").withZone(ZoneId.systemDefault());
 
-        public ReportSurvey(String name, String status, int numQuestions, Date dateCreated) {
+        public ReportSurvey(String name, String status, int numQuestions, Date dateCreated, int totalResponses) {
             this.name = name;
             this.status = status;
             this.numQuestions = numQuestions;
             this.dateCreated = (dateCreated != null) ? DATE_FORMAT.format(dateCreated.toInstant()) : "N/A";
-            this.totalResponses = 0; // Initialize to zero, will be populated later
+            this.totalResponses = totalResponses; // Use the passed value
         }
 
         // Standard Getters (required for TableView PropertyValueFactory)
@@ -93,11 +93,13 @@ public class ReportController {
                     questionCount = ((List) doc.get("questions")).size();
                 }
 
+                int totalResponses = 0;
                 ReportSurvey report = new ReportSurvey(
                         doc.getString("name"),
                         doc.getString("status"),
                         questionCount,
-                        doc.getDate("dateCreated")
+                        doc.getDate("dateCreated"),
+                        totalResponses
                 );
                 reportData.add(report);
             }

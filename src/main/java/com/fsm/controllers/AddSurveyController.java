@@ -19,7 +19,6 @@ public class AddSurveyController {
 
     @FXML private TextField txtSurveyName;
     @FXML private ComboBox<String> cmbStatus;
-    @FXML private TextField txtNumQuestions;
     @FXML private Button btnSave;
     @FXML private Button btnCancel;
 
@@ -48,7 +47,6 @@ public class AddSurveyController {
             // 1. Pre-fill the form fields
             txtSurveyName.setText(surveyToEdit.getName());
             cmbStatus.setValue(surveyToEdit.getStatus());
-            txtNumQuestions.setText(String.valueOf(surveyToEdit.getQuestions()));
 
             // 2. Change the window title (in the next step's FXML loading)
             btnSave.setText("Update Survey");
@@ -71,22 +69,16 @@ public class AddSurveyController {
             System.err.println("Error: Survey Name cannot be empty.");
             return;
         }
-
-        int numQuestions = 0;
-        try {
-            numQuestions = Integer.parseInt(txtNumQuestions.getText().trim());
-        } catch (NumberFormatException e) {
-            System.err.println("Warning: Invalid number of questions entered. Defaulting to 0.");
-        }
-
+        
         // Check if we are in EDIT mode or ADD mode
         if (originalSurveyName != null) {
             // EDIT MODE
-            if (updateSurveyInMongo(name, status, numQuestions)) {
+            if (updateSurveyInMongo(name, status)) {
                 System.out.println("Survey updated successfully: " + name);
             }
         } else {
             // ADD MODE (Keep the existing logic)
+            int numQuestions = 0;
             Document surveyDoc = new Document()
                     .append("name", name)
                     .append("status", status)
@@ -105,7 +97,7 @@ public class AddSurveyController {
         closeWindow();
     }
 
-    private boolean updateSurveyInMongo(String newName, String newStatus, int newNumQuestions) {
+    private boolean updateSurveyInMongo(String newName, String newStatus) {
         MongoDatabase db = MongoManager.connect();
         if (db == null) {
             System.err.println("FATAL: Cannot connect to DB to update survey.");
@@ -120,8 +112,7 @@ public class AddSurveyController {
             // 2. Define the updates
             org.bson.conversions.Bson updates = Updates.combine(
                     Updates.set("name", newName),
-                    Updates.set("status", newStatus),
-                    Updates.set("numQuestions", newNumQuestions)
+                    Updates.set("status", newStatus)
             );
 
             // 3. Perform the update

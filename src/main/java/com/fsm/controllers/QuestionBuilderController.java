@@ -243,7 +243,8 @@ public class QuestionBuilderController {
         }
 
         // 2. Perform the MongoDB update
-        if (saveQuestionsToMongo(questionDocs)) {
+        int newQuestionCount = currentQuestions.size();
+        if (saveQuestionsToMongo(questionDocs, newQuestionCount)) {
             System.out.println("SUCCESS: Questions saved for survey: " + currentSurvey.getName());
         } else {
             System.err.println("ERROR: Failed to save questions to DB.");
@@ -261,20 +262,28 @@ public class QuestionBuilderController {
      * @param questionDocs List of BSON Documents representing questions.
      * @return true if update was successful.
      */
-    private boolean saveQuestionsToMongo(List<Document> questionDocs) {
+    private boolean saveQuestionsToMongo(List<Document> questionDocs, int questionCount) {
         MongoDatabase db = MongoManager.connect();
         if (db == null) return false;
 
         try {
             MongoCollection<Document> collection = db.getCollection("surveys");
 
-            // Filter: Find the survey using its unique name (or _id in a production app)
+            // Filter: Find the survey using its unique name
             org.bson.conversions.Bson filter = Filters.eq("name", currentSurvey.getName());
 
-            // Update: Set the 'questions' field to the new array of question documents
-            org.bson.conversions.Bson update = Updates.set("questions", questionDocs);
+            // Update 1: Set the 'questions' array
+            org.bson.conversions.Bson updateQuestions = Updates.set("questions", questionDocs);
 
-            collection.updateOne(filter, update);
+            // Update 2: Set the CRITICAL 'numQuestions' integer field
+            org.bson.conversions.Bson updateCount = Updates.set("numQuestions", questionCount); // <<< CRITICAL FIX
+
+            // Combine updates into a single list
+            List<org.bson.conversions.Bson> updatesList = List.of(updateQuestions, updateCount);
+
+            // Apply both updates to the document
+            collection.updateOne(filter, Updates.combine(updatesList));
+
             return true;
 
         } catch (Exception e) {

@@ -23,9 +23,6 @@
     <Label text="Status:" GridPane.columnIndex="0" GridPane.rowIndex="2" />
     <ComboBox fx:id="cmbStatus" prefWidth="250.0" GridPane.columnIndex="1" GridPane.rowIndex="2" />
 
-    <Label text="Number of Questions:" GridPane.columnIndex="0" GridPane.rowIndex="3" />
-    <TextField fx:id="txtNumQuestions" promptText="Enter a number (optional)" GridPane.columnIndex="1" GridPane.rowIndex="3" />
-
     <HBox alignment="CENTER_RIGHT" spacing="10.0" GridPane.columnIndex="1" GridPane.rowIndex="4">
         <Button fx:id="btnSave" text="Save Survey" defaultButton="true" />
         <Button fx:id="btnCancel" text="Cancel" cancelButton="true" />
