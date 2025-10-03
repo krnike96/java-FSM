@@ -28,6 +28,7 @@ import javafx.scene.control.Alert.AlertType;
 import javafx.scene.control.ButtonType;
 import com.mongodb.client.model.Filters;
 import java.util.Optional;
+import org.bson.conversions.Bson; // Import for conditional filtering
 
 public class SurveyController {
 
@@ -38,20 +39,24 @@ public class SurveyController {
         private String name;
         private String status;
         private int questions;
+        private String creator; // New field to hold the creator's username
 
-        public Survey(String name, String status, int questions) {
+        public Survey(String name, String status, int questions, String creator) {
             this.name = name;
             this.status = status;
             this.questions = questions;
+            this.creator = creator;
         }
 
         // Getters and Setters (REQUIRED for TableView)
         public String getName() { return name; }
         public void setName(String name) { this.name = name; }
         public String getStatus() { return status; }
-        public void setStatus(String status) { this.status = status; }
+        public void setStatus(String status) { this.setStatus(status); }
         public int getQuestions() { return questions; }
         public void setQuestions(int questions) { this.questions = questions; }
+        public String getCreator() { return creator; } // New Getter
+        public void setCreator(String creator) { this.creator = creator; } // New Setter
     }
     // -----------------------------------------------------------
 
@@ -66,18 +71,24 @@ public class SurveyController {
     @FXML private Button btnDelete;
     @FXML private Button btnManageQuestions;
 
+    private String currentUserRole;         // Stored for permission checks
+    private String currentLoggedInUsername; // **New Field** - Stored for filtering surveys
+
     private final ObservableList<Survey> masterData = FXCollections.observableArrayList();
 
     /**
-     * CRITICAL: New method called by MainDashboardController to set up RBAC
-     * and then load the data.
+     * CRITICAL: Updated method to accept and store the logged-in username.
      * @param userRole The role of the currently logged-in user.
+     * @param username The username of the currently logged-in user.
      */
-    public void initData(String userRole) {
+    public void initData(String userRole, String username) {
+        this.currentUserRole = userRole;
+        this.currentLoggedInUsername = username;
+
         // 1. Apply Role-Based Access Control
         applyRoleRestrictions(userRole);
 
-        // 2. Load the data (now called here instead of initialize)
+        // 2. Load the data (now filtered based on role/username)
         loadSurveyData();
     }
 
@@ -95,11 +106,6 @@ public class SurveyController {
             btnDelete.setDisable(true);
             btnManageQuestions.setDisable(true);
 
-            // Optionally, you can also hide them for a cleaner UI:
-            // btnAdd.setVisible(false);
-            // btnEdit.setVisible(false);
-            // btnDelete.setVisible(false);
-            // btnManageQuestions.setVisible(false);
             System.out.println("Survey view: Modification buttons disabled for role: " + userRole);
         }
     }
@@ -121,6 +127,9 @@ public class SurveyController {
         // NOTE: loadSurveyData() is removed from here and moved to initData()
     }
 
+    /**
+     * FIX: Loads survey data, applying a filter if the user is a Survey Creator.
+     */
     private void loadSurveyData() {
         masterData.clear();
         MongoDatabase db = MongoManager.connect();
@@ -134,12 +143,31 @@ public class SurveyController {
         try {
             MongoCollection<Document> surveyCollection = db.getCollection("surveys");
 
-            for (Document doc : surveyCollection.find()) {
+            // --- CRITICAL FILTERING LOGIC ---
+            Bson filter = new Document(); // Start with an empty filter (shows all)
+
+            if ("Survey Creator".equals(currentUserRole)) {
+                // If user is a Survey Creator, filter by the 'creator' field matching the logged-in username
+                filter = Filters.eq("creator", currentLoggedInUsername);
+                System.out.println("Survey Creator view: Filtering surveys for creator: " + currentLoggedInUsername);
+            } else if ("Administrator".equals(currentUserRole)) {
+                System.out.println("Admin view: Showing all surveys.");
+                // No filter needed, already an empty Document()
+            } else {
+                // Default/Data Entry: Show nothing, or only public surveys (assuming Data Entry sees none here)
+                filter = Filters.eq("_id", null); // Filter that matches nothing
+                System.out.println("Data Entry view: Showing no surveys.");
+            }
+            // --- END FILTERING LOGIC ---
+
+
+            for (Document doc : surveyCollection.find(filter)) {
                 String name = doc.getString("name");
                 String status = doc.getString("status");
                 int numQuestions = doc.getInteger("numQuestions", 0);
+                String creator = doc.getString("creator"); // Ensure this field exists in your DB documents
 
-                masterData.add(new Survey(name, status, numQuestions));
+                masterData.add(new Survey(name, status, numQuestions, creator));
             }
 
         } catch (MongoException e) {
@@ -149,28 +177,30 @@ public class SurveyController {
         }
     }
 
-    // --- Button Handlers (Unchanged) ---
+    // --- Button Handlers (Needs access control for edit/delete) ---
 
     private void handleAddSurvey() {
+        if (!("Administrator".equals(currentUserRole) || "Survey Creator".equals(currentUserRole))) {
+            showAlert(AlertType.ERROR, "Permission Denied", "Your role does not permit creating new surveys.");
+            return;
+        }
+
         try {
             FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/fsm/add-survey-form.fxml"));
             Parent root = loader.load();
 
-            // Get the controller instance of the new form
             AddSurveyController addController = loader.getController();
 
-            // Pass a reference to THIS controller, so the form can call refreshTable()
+            // Pass the current logged-in user to stamp the survey creator
+            addController.setCreatorUsername(currentLoggedInUsername);
+
             addController.setParentController(this);
 
-            // Create the new modal stage (window)
             Stage stage = new Stage();
             stage.setTitle("Add New Survey");
-
-            // Modality ensures the user must interact with this window before returning to the dashboard
             stage.initModality(Modality.APPLICATION_MODAL);
-
             stage.setScene(new Scene(root));
-            stage.showAndWait(); // Wait until the form is closed
+            stage.showAndWait();
 
         } catch (IOException e) {
             e.printStackTrace();
@@ -182,14 +212,16 @@ public class SurveyController {
         Survey selectedSurvey = surveyTable.getSelectionModel().getSelectedItem();
 
         if (selectedSurvey == null) {
-            // Use the same warning as delete if nothing is selected
-            Alert alert = new Alert(AlertType.WARNING);
-            alert.setTitle("No Selection");
-            alert.setHeaderText("No Survey Selected");
-            alert.setContentText("Please select a survey from the table to edit.");
-            alert.showAndWait();
+            showAlert(AlertType.WARNING, "No Selection", "Please select a survey from the table to edit.");
             return;
         }
+
+        // --- Access Control Check for Edit ---
+        if ("Survey Creator".equals(currentUserRole) && !selectedSurvey.getCreator().equals(currentLoggedInUsername)) {
+            showAlert(AlertType.ERROR, "Permission Denied", "You can only edit surveys that you have created.");
+            return;
+        }
+
 
         try {
             FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/fsm/add-survey-form.fxml"));
@@ -197,16 +229,16 @@ public class SurveyController {
 
             AddSurveyController editController = loader.getController();
 
-            // CRITICAL STEP: Pass the selected survey data to the controller
+            // Pass the current logged-in user to prevent editing other people's surveys
+            editController.setCreatorUsername(currentLoggedInUsername);
+
             editController.initData(this, selectedSurvey);
 
-            // Create the new modal stage (window)
             Stage stage = new Stage();
-            stage.setTitle("Edit Survey: " + selectedSurvey.getName()); // Set dynamic title
+            stage.setTitle("Edit Survey: " + selectedSurvey.getName());
             stage.initModality(Modality.APPLICATION_MODAL);
-
             stage.setScene(new Scene(root));
-            stage.showAndWait(); // Wait until the form is closed
+            stage.showAndWait();
 
         } catch (IOException e) {
             e.printStackTrace();
@@ -218,16 +250,16 @@ public class SurveyController {
         Survey selectedSurvey = surveyTable.getSelectionModel().getSelectedItem();
 
         if (selectedSurvey == null) {
-            // Show a simple warning if nothing is selected
-            Alert alert = new Alert(AlertType.WARNING);
-            alert.setTitle("No Selection");
-            alert.setHeaderText("No Survey Selected");
-            alert.setContentText("Please select a survey from the table to delete.");
-            alert.showAndWait();
+            showAlert(AlertType.WARNING, "No Selection", "Please select a survey from the table to delete.");
             return;
         }
 
-        // 1. Show Confirmation Dialog
+        // --- Access Control Check for Delete ---
+        if ("Survey Creator".equals(currentUserRole) && !selectedSurvey.getCreator().equals(currentLoggedInUsername)) {
+            showAlert(AlertType.ERROR, "Permission Denied", "You can only delete surveys that you have created.");
+            return;
+        }
+
         Alert confirmAlert = new Alert(AlertType.CONFIRMATION);
         confirmAlert.setTitle("Confirm Deletion");
         confirmAlert.setHeaderText("Permanently Delete Survey?");
@@ -236,26 +268,36 @@ public class SurveyController {
         Optional<ButtonType> result = confirmAlert.showAndWait();
 
         if (result.isPresent() && result.get() == ButtonType.OK) {
-            // 2. Perform MongoDB Deletion
             if (deleteSurveyFromMongo(selectedSurvey.getName())) {
-                // 3. Refresh the Table
                 refreshTable();
                 System.out.println("SUCCESS: Survey deleted: " + selectedSurvey.getName());
             } else {
-                // Display error if DB operation fails
-                Alert errorAlert = new Alert(AlertType.ERROR);
-                errorAlert.setTitle("Deletion Failed");
-                errorAlert.setHeaderText("Database Error");
-                errorAlert.setContentText("Failed to delete survey from the database.");
-                errorAlert.showAndWait();
+                showAlert(AlertType.ERROR, "Deletion Failed", "Failed to delete survey from the database.");
             }
         }
     }
 
+    // The handleManageQuestions should also check permission
+    private void handleManageQuestions() {
+        Survey selectedSurvey = surveyTable.getSelectionModel().getSelectedItem();
+
+        if (selectedSurvey == null) {
+            showAlert(AlertType.WARNING, "No Selection", "Please select a survey to manage its questions.");
+            return;
+        }
+
+        // --- Access Control Check for Question Management ---
+        if ("Survey Creator".equals(currentUserRole) && !selectedSurvey.getCreator().equals(currentLoggedInUsername)) {
+            showAlert(AlertType.ERROR, "Permission Denied", "You can only manage questions for surveys that you have created.");
+            return;
+        }
+
+        loadQuestionBuilderModal(selectedSurvey);
+    }
+
+
     /**
      * Executes the MongoDB delete operation.
-     * @param surveyName The name (unique identifier) of the survey to delete.
-     * @return true if deletion was successful, false otherwise.
      */
     private boolean deleteSurveyFromMongo(String surveyName) {
         MongoDatabase db = MongoManager.connect();
@@ -265,35 +307,15 @@ public class SurveyController {
 
         try {
             MongoCollection<Document> collection = db.getCollection("surveys");
-
-            // Delete the document where the 'name' field matches the selected survey's name
             collection.deleteOne(Filters.eq("name", surveyName));
-
             return true;
-
         } catch (MongoException e) {
             System.err.println("MongoDB Delete Error: " + e.getMessage());
             return false;
         }
     }
 
-    private void handleManageQuestions() {
-        SurveyController.Survey selectedSurvey = surveyTable.getSelectionModel().getSelectedItem();
-
-        if (selectedSurvey == null) {
-            Alert alert = new Alert(AlertType.WARNING);
-            alert.setTitle("No Selection");
-            alert.setHeaderText("No Survey Selected");
-            alert.setContentText("Please select a survey to manage its questions.");
-            alert.showAndWait();
-            return;
-        }
-
-        loadQuestionBuilderModal(selectedSurvey);
-    }
-
-
-    private void loadQuestionBuilderModal(SurveyController.Survey survey) {
+    private void loadQuestionBuilderModal(Survey survey) {
         try {
             FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/fsm/question-builder-view.fxml"));
             Parent root = loader.load();
@@ -319,5 +341,13 @@ public class SurveyController {
 
     public void refreshTable() {
         loadSurveyData();
+    }
+
+    private void showAlert(AlertType type, String title, String content) {
+        Alert alert = new Alert(type);
+        alert.setTitle(title);
+        alert.setHeaderText(null);
+        alert.setContentText(content);
+        alert.showAndWait();
     }
 }

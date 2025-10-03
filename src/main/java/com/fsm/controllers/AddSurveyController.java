@@ -22,10 +22,11 @@ public class AddSurveyController {
     @FXML private Button btnSave;
     @FXML private Button btnCancel;
 
-    // An interface to communicate back to the main SurveyController
     private SurveyController parentController;
-
     private String originalSurveyName;
+
+    // CRITICAL FIX: Field to store the username of the person creating/editing the survey
+    private String creatorUsername;
 
     @FXML
     public void initialize() {
@@ -37,12 +38,25 @@ public class AddSurveyController {
         btnCancel.setOnAction(e -> handleCancel());
     }
 
+    /**
+     * FIX: Setter method to receive the current logged-in username from SurveyController.
+     * This resolves the "cannot resolve method" error.
+     */
+    public void setCreatorUsername(String username) {
+        this.creatorUsername = username;
+        System.out.println("AddSurveyController received creator username: " + username);
+    }
+
     public void initData(SurveyController parent, Survey surveyToEdit) {
         this.parentController = parent;
 
         // If a survey is passed, enter EDIT mode
         if (surveyToEdit != null) {
             this.originalSurveyName = surveyToEdit.getName();
+
+            // Set the creatorUsername from the existing survey data
+            // This ensures we don't accidentally overwrite the creator in EDIT mode
+            this.creatorUsername = surveyToEdit.getCreator();
 
             // 1. Pre-fill the form fields
             txtSurveyName.setText(surveyToEdit.getName());
@@ -73,16 +87,19 @@ public class AddSurveyController {
         // Check if we are in EDIT mode or ADD mode
         if (originalSurveyName != null) {
             // EDIT MODE
+            // The original creatorUsername is retained from initData
             if (updateSurveyInMongo(name, status)) {
                 System.out.println("Survey updated successfully: " + name);
             }
         } else {
-            // ADD MODE (Keep the existing logic)
+            // ADD MODE
             int numQuestions = 0;
             Document surveyDoc = new Document()
                     .append("name", name)
                     .append("status", status)
                     .append("numQuestions", numQuestions)
+                    // CRITICAL FIX: Append the creator's username when creating a new survey
+                    .append("creator", creatorUsername)
                     .append("dateCreated", new java.util.Date());
 
             if (insertSurveyIntoMongo(surveyDoc)) {
@@ -110,6 +127,7 @@ public class AddSurveyController {
             org.bson.conversions.Bson filter = Filters.eq("name", originalSurveyName);
 
             // 2. Define the updates
+            // We do NOT update the 'creator' field in EDIT mode.
             org.bson.conversions.Bson updates = Updates.combine(
                     Updates.set("name", newName),
                     Updates.set("status", newStatus)

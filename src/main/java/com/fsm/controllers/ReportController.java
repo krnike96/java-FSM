@@ -3,6 +3,7 @@ package com.fsm.controllers;
 import com.fsm.database.MongoManager;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
+import com.mongodb.client.model.Filters;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
@@ -30,10 +31,9 @@ public class ReportController {
 
     // -----------------------------------------------------------
     // Nested Model Class: Read-only data model for the report table
-    // ... (ReportSurvey class remains the same)
     // -----------------------------------------------------------
     public static class ReportSurvey {
-        private final String id; // Added ID field
+        private final String id;
         private final String name;
         private final String status;
         private final int numQuestions;
@@ -71,19 +71,39 @@ public class ReportController {
     @FXML private TableColumn<ReportSurvey, Integer> colQuestions;
     @FXML private TableColumn<ReportSurvey, String> colDateCreated;
     @FXML private TableColumn<ReportSurvey, Integer> colTotalResponses;
-    @FXML private Button btnViewDetails; // New button for viewing details
+    @FXML private Button btnViewDetails;
 
-    @FXML private AnchorPane reportContainer; // Assuming the ReportController is loaded into an AnchorPane
+    @FXML private AnchorPane reportContainer;
+
+    private String currentUserRole;
+    private String currentUsername;
 
     private final ObservableList<ReportSurvey> reportData = FXCollections.observableArrayList();
 
+    /**
+     * Initializes the controller with the logged-in user's role and username.
+     * This is called by MainDashboardController before the view is displayed.
+     */
+    public void initData(String userRole, String username) {
+        this.currentUserRole = userRole;
+        this.currentUsername = username;
+        // --- NEW LOGGING ADDED ---
+        System.out.println("INIT_DATA: Received Role: " + userRole + ", Username: " + username);
+        // --- END NEW LOGGING ---
+        // Load data only after user information is set
+        loadReportData();
+    }
+
     @FXML
     public void initialize() {
-        // ... (Column setup remains the same)
+        // 1. Column setup
         colSurveyName.setCellValueFactory(new PropertyValueFactory<>("name"));
         colStatus.setCellValueFactory(new PropertyValueFactory<>("status"));
         colQuestions.setCellValueFactory(new PropertyValueFactory<>("numQuestions"));
+
+        // FIX: Corrected typo in setCellValueFactory for colDateCreated
         colDateCreated.setCellValueFactory(new PropertyValueFactory<>("dateCreated"));
+
         colTotalResponses.setCellValueFactory(new PropertyValueFactory<>("totalResponses"));
 
         // 2. Set the data source
@@ -96,11 +116,9 @@ public class ReportController {
             btnViewDetails.setDisable(newVal == null);
         });
 
-        // 3. Load data on initialization
-        loadReportData();
+        // NOTE: loadReportData() is now called from initData(role, username)
     }
 
-    // ... (getSurveyResponseCounts method remains the same)
     private Map<String, Integer> getSurveyResponseCounts(MongoDatabase db) {
         Map<String, Integer> counts = new HashMap<>();
         MongoCollection<Document> responseCollection = db.getCollection("responses");
@@ -137,12 +155,39 @@ public class ReportController {
             return;
         }
 
+        // --- NEW LOGGING ADDED ---
+        System.out.println("INFO: Database connection established successfully for reports.");
+        // --- END NEW LOGGING ---
+
+        // --- RBAC Logic for Reports ---
+        Bson filter = new Document(); // Default: empty filter (shows all)
+
+        // Only restrict access if the user is explicitly a Survey Creator
+        if ("Survey Creator".equals(currentUserRole) && currentUsername != null) {
+            // Creators can only see surveys they created.
+            // Using a case-insensitive regex filter to account for potential case mismatches
+            filter = Filters.regex("creator", "^" + currentUsername + "$", "i");
+            System.out.println("✅ Report RBAC: Creator Filter Applied (Case-Insensitive Regex). User: " + currentUsername + ", Filter: " + filter.toString());
+        } else {
+            // FIX: If the role is NOT "Survey Creator" (i.e., Administrator, etc.), show all.
+            filter = new Document(); // Ensure filter is empty for Admin to see all
+            System.out.println("✅ Report RBAC: Showing ALL surveys. Role: " + currentUserRole);
+        }
+        // --- End RBAC Logic ---
+
         try {
             Map<String, Integer> responseCounts = getSurveyResponseCounts(db);
 
             MongoCollection<Document> surveyCollection = db.getCollection("surveys");
 
-            for (Document doc : surveyCollection.find()) {
+            // Apply the RBAC filter to the find operation
+            int documentsFound = 0;
+            for (Document doc : surveyCollection.find(filter)) {
+                // --- NEW LOGGING ADDED ---
+                System.out.println("DEBUG: Found and processing survey: " + doc.getString("name"));
+                // --- END NEW LOGGING ---
+                documentsFound++;
+
                 String surveyId = doc.getObjectId("_id").toHexString();
 
                 int questionCount = 0;
@@ -152,7 +197,6 @@ public class ReportController {
 
                 int totalResponses = responseCounts.getOrDefault(surveyId, 0);
 
-                // IMPORTANT: Pass the survey ID to the ReportSurvey model
                 ReportSurvey report = new ReportSurvey(
                         surveyId, // Pass ID
                         doc.getString("name"),
@@ -163,6 +207,17 @@ public class ReportController {
                 );
                 reportData.add(report);
             }
+
+            // --- NEW LOGGING ADDED ---
+            if (documentsFound == 0) {
+                System.out.println("⚠️ WARNING: MongoDB query executed successfully but returned zero survey documents.");
+            }
+            // --- END NEW LOGGING ---
+
+
+            // Report final count
+            System.out.println("INFO: Loaded " + reportData.size() + " reports for user '" + currentUsername + "'.");
+
         } catch (Exception e) {
             System.err.println("Error loading report data: " + e.getMessage());
         }
@@ -173,7 +228,6 @@ public class ReportController {
         ReportSurvey selectedSurvey = surveyReportTable.getSelectionModel().getSelectedItem();
 
         if (selectedSurvey == null) {
-            // Should be disabled, but good practice to check
             return;
         }
 
@@ -183,11 +237,11 @@ public class ReportController {
 
             // Pass the survey data to the new controller
             DetailedReportController controller = loader.getController();
+            // NOTE: We may need to update DetailedReportController later to include RBAC logic too
             controller.initData(selectedSurvey.getId(), selectedSurvey.getName());
 
             // Replace the current content (ReportController's view) with the detailed view
-            // NOTE: This assumes ReportController is loaded into an AnchorPane or similar container
-            AnchorPane parent = (AnchorPane) surveyReportTable.getParent().getParent(); // Adjust based on your FXML nesting
+            AnchorPane parent = (AnchorPane) surveyReportTable.getParent().getParent();
             parent.getChildren().clear();
             parent.getChildren().add(detailedReportView);
 

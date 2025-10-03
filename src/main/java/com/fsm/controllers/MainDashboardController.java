@@ -69,7 +69,6 @@ public class MainDashboardController {
 
     /**
      * Public method called by LoginController to display the initial view.
-     * (Fixes the missing method error in the LoginController call)
      */
     public void loadDefaultView() {
         loadSurveyDecisionView();
@@ -112,14 +111,19 @@ public class MainDashboardController {
             Object controller = loader.getController();
 
             if (controller != null) {
-                if ("SurveyController".equals(controllerTypeHint)) {
-                    ((SurveyController) controller).initData(this.currentUserRole);
+                if ("ReportController".equals(controllerTypeHint)) {
+                    // *** CRITICAL FIX: Initialize ReportController ***
+                    System.out.println("DEBUG: Initializing ReportController with Role: " + currentUserRole + ", Username: " + currentLoggedInUsername);
+                    ((ReportController) controller).initData(this.currentUserRole, this.currentLoggedInUsername);
+                } else if ("SurveyController".equals(controllerTypeHint)) {
+                    // Pass BOTH role AND username to the SurveyController
+                    ((SurveyController) controller).initData(this.currentUserRole, this.currentLoggedInUsername);
                 } else if ("UserController".equals(controllerTypeHint)) {
-                    // CRITICAL: Pass BOTH role AND username to UserController
+                    // Pass BOTH role AND username to UserController
                     ((UserController) controller).initData(this.currentUserRole, this.currentLoggedInUsername);
                 } else if ("SurveyTakerController".equals(controllerTypeHint)) {
-                    // Assuming initData(String role, String username) signature
-                    ((SurveyTakerController) controller).initData(this.currentUserRole);
+                    // Pass BOTH role AND username to SurveyTakerController
+                    ((SurveyTakerController) controller).initData(this.currentUserRole, this.currentLoggedInUsername);
                 }
             }
 
@@ -134,12 +138,10 @@ public class MainDashboardController {
         } catch (IOException e) {
             System.err.println("Error loading FXML view: " + fxmlPath + ". " + e.getMessage());
             e.printStackTrace();
-            mainContentArea.getChildren().clear();
             loadErrorView("Could not load screen from " + fxmlPath);
         } catch (Exception e) {
             System.err.println("Error initializing controller for view: " + fxmlPath + ". " + e.getMessage());
             e.printStackTrace();
-            mainContentArea.getChildren().clear();
             loadErrorView("Controller initialization failed for " + controllerTypeHint);
         }
     }
@@ -172,7 +174,6 @@ public class MainDashboardController {
 
     /**
      * Displays a generic error message in the main content area.
-     * (This is the missing method that caused the 'cannot find symbol' error)
      */
     private void loadErrorView(String message) {
         VBox errorBox = new VBox(20);

@@ -57,9 +57,16 @@ public class SurveyTakerController {
         });
     }
 
-    public void initData(String userRole) {
+    /**
+     * Initializes the controller with the logged-in user's data.
+     * FIX: Now accepts two arguments (username and role) to match the caller (MainDashboardController).
+     * @param userRole The role of the current user.
+     * @param username The username of the current user (used for logging responses).
+     */
+    public void initData(String userRole, String username) {
         this.currentUserRole = userRole;
-        this.currentUsername = "kumar"; // Using 'kumar' as the Data Entry User ID
+        // FIX: Use the actual logged-in username instead of the hardcoded value "kumar"
+        this.currentUsername = username;
         lblUsername.setText("Logged in as: " + currentUsername + " (" + currentUserRole + ")");
     }
 
@@ -262,6 +269,7 @@ public class SurveyTakerController {
 
             Document responseDoc = new Document()
                     .append("survey_id", new ObjectId(surveyId))
+                    // Use the dynamically set currentUsername
                     .append("user_id", this.currentUsername)
                     .append("timestamp", new java.util.Date())
                     .append("answers", responses);
