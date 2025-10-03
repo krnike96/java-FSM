@@ -10,7 +10,7 @@ import javafx.fxml.FXML;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.Button;
-import javafx.scene.layout.VBox;
+import javafx.scene.layout.VBox; // <-- ADDED MISSING IMPORT
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.beans.property.SimpleStringProperty;
@@ -34,8 +34,6 @@ public class UserController {
         private String username;
         private String role;
 
-        // Note: We avoid passing the password here for security
-
         public User(String username, String role) {
             this.username = username;
             this.role = role;
@@ -57,20 +55,20 @@ public class UserController {
 
     private final ObservableList<User> masterData = FXCollections.observableArrayList();
 
-    // Field to store the user's role
     private String currentUserRole;
+    private String currentLoggedInUsername;
 
     /**
-     * CRITICAL: New method called by MainDashboardController to set up RBAC
-     * and then load the data.
+     * CRITICAL: Method called by MainDashboardController to set up RBAC
+     * and load data. Requires both role and username.
      * @param userRole The role of the currently logged-in user.
+     * @param username The username of the currently logged-in user.
      */
-    public void initData(String userRole) {
+    public void initData(String userRole, String username) {
         this.currentUserRole = userRole;
-        // 1. Apply Role-Based Access Control to the buttons
-        applyRoleRestrictions();
+        this.currentLoggedInUsername = username;
 
-        // 2. Load the data
+        applyRoleRestrictions();
         loadUserData();
     }
 
@@ -78,7 +76,6 @@ public class UserController {
      * Hides or disables modification buttons for non-administrator users.
      */
     private void applyRoleRestrictions() {
-        // Only Administrators can modify users.
         boolean isAdmin = "Administrator".equals(currentUserRole);
 
         if (!isAdmin) {
@@ -93,16 +90,8 @@ public class UserController {
 
     @FXML
     public void initialize() {
-        // 1. Link the model properties to the TableView columns
         colUsername.setCellValueFactory(cellData -> new SimpleStringProperty(cellData.getValue().getUsername()));
         colRole.setCellValueFactory(cellData -> new SimpleStringProperty(cellData.getValue().getRole()));
-
-        // NOTE: loadUserData() is removed from here and moved to initData()
-
-        // 2. Set up button handlers
-        btnAddUser.setOnAction(event -> handleAddUser());
-        btnEditUser.setOnAction(event -> handleEditUser());
-        btnDeleteUser.setOnAction(event -> handleDeleteUser());
     }
 
     public void refreshTable() {
@@ -112,7 +101,7 @@ public class UserController {
     private void loadUserData() {
         masterData.clear();
         MongoDatabase db = MongoManager.connect();
-        userTable.setItems(masterData); // Set empty list immediately
+        userTable.setItems(masterData);
 
         if (db == null) {
             System.err.println("Database connection failed. Cannot load user data.");
@@ -122,7 +111,6 @@ public class UserController {
         try {
             MongoCollection<Document> userCollection = db.getCollection("users");
 
-            // Iterate over all users in the collection
             for (Document doc : userCollection.find()) {
                 String username = doc.getString("username");
                 String role = doc.getString("role");
@@ -137,13 +125,15 @@ public class UserController {
         }
     }
 
-    // --- Button Handlers ---
+    // --- Button Handlers (MUST BE @FXML ANNOTATED) ---
 
-    private void handleAddUser() {
-        // Double check for Admin access at the handler level for maximum security
+    /**
+     * Handles the Add User button action.
+     */
+    @FXML
+    private void handleAddUser() { // <--- ENSURING CORRECT SIGNATURE
         if (!"Administrator".equals(currentUserRole)) {
-            Alert deniedAlert = new Alert(AlertType.ERROR, "Access Denied: Only Administrators can add users.", ButtonType.OK);
-            deniedAlert.showAndWait();
+            showAlert(AlertType.ERROR, "Access Denied", "Only Administrators can add users.");
             return;
         }
 
@@ -151,17 +141,16 @@ public class UserController {
             FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/fsm/add-user-form.fxml"));
             Parent root = loader.load();
 
-            // Get the controller and pass a reference to THIS controller
             AddUserController addController = loader.getController();
             addController.setParentController(this);
+            addController.setCurrentLoggedInUsername(this.currentLoggedInUsername);
 
-            // Create the new modal stage (window)
             Stage stage = new Stage();
             stage.setTitle("Add New User");
             stage.initModality(Modality.APPLICATION_MODAL);
 
             stage.setScene(new Scene(root));
-            stage.showAndWait(); // Wait until the form is closed
+            stage.showAndWait();
 
         } catch (IOException e) {
             e.printStackTrace();
@@ -169,24 +158,20 @@ public class UserController {
         }
     }
 
-    private void handleEditUser() {
-        // Double check for Admin access at the handler level for maximum security
+    /**
+     * Handles the Edit User button action.
+     */
+    @FXML
+    private void handleEditUser() { // <--- ENSURING CORRECT SIGNATURE
         if (!"Administrator".equals(currentUserRole)) {
-            Alert deniedAlert = new Alert(AlertType.ERROR, "Access Denied: Only Administrators can edit users.", ButtonType.OK);
-            deniedAlert.showAndWait();
+            showAlert(AlertType.ERROR, "Access Denied", "Only Administrators can edit users.");
             return;
         }
 
-        // Note: Use the fully qualified name for the inner class
         UserController.User selectedUser = userTable.getSelectionModel().getSelectedItem();
 
         if (selectedUser == null) {
-            // Use the same warning as delete if nothing is selected
-            Alert alert = new Alert(AlertType.WARNING);
-            alert.setTitle("No Selection");
-            alert.setHeaderText("No User Selected");
-            alert.setContentText("Please select a user from the table to edit.");
-            alert.showAndWait();
+            showAlert(AlertType.WARNING, "No Selection", "Please select a user from the table to edit.");
             return;
         }
 
@@ -196,17 +181,15 @@ public class UserController {
 
             AddUserController editController = loader.getController();
 
-            // CRITICAL STEP: Pass the selected user data to the controller for editing
-            // The initData method will handle pre-filling the form.
             editController.initData(this, selectedUser);
+            editController.setCurrentLoggedInUsername(this.currentLoggedInUsername);
 
-            // Create the new modal stage (window)
             Stage stage = new Stage();
-            stage.setTitle("Edit User: " + selectedUser.getUsername()); // Set dynamic title
+            stage.setTitle("Edit User: " + selectedUser.getUsername());
             stage.initModality(Modality.APPLICATION_MODAL);
 
             stage.setScene(new Scene(root));
-            stage.showAndWait(); // Wait until the form is closed
+            stage.showAndWait();
 
         } catch (IOException e) {
             e.printStackTrace();
@@ -214,37 +197,37 @@ public class UserController {
         }
     }
 
-    private void handleDeleteUser() {
-        // Double check for Admin access at the handler level for maximum security
+    /**
+     * Handles the Delete User button action.
+     */
+    @FXML
+    private void handleDeleteUser() { // <--- ENSURING CORRECT SIGNATURE
         if (!"Administrator".equals(currentUserRole)) {
-            Alert deniedAlert = new Alert(AlertType.ERROR, "Access Denied: Only Administrators can delete users.", ButtonType.OK);
-            deniedAlert.showAndWait();
+            showAlert(AlertType.ERROR, "Access Denied", "Only Administrators can delete users.");
             return;
         }
 
-        // Note: We must use the fully qualified name for the inner class
         UserController.User selectedUser = userTable.getSelectionModel().getSelectedItem();
 
         if (selectedUser == null) {
-            Alert alert = new Alert(AlertType.WARNING);
-            alert.setTitle("No Selection");
-            alert.setHeaderText("No User Selected");
-            alert.setContentText("Please select a user from the table to delete.");
-            alert.showAndWait();
+            showAlert(AlertType.WARNING, "No Selection", "Please select a user from the table to delete.");
             return;
         }
 
-        // Safety Check: Prevent deleting the primary admin account (or logged-in user)
+        // Security Check 1: Prevent the logged-in user from deleting themselves
+        if (selectedUser.getUsername().equals(currentLoggedInUsername)) {
+            showAlert(AlertType.ERROR, "Deletion Denied", "You cannot delete your own user account.");
+            return;
+        }
+
+        // Security Check 2: Prevent deleting the primary admin account
         if (selectedUser.getUsername().equalsIgnoreCase("admin")) {
-            Alert alert = new Alert(AlertType.ERROR);
-            alert.setTitle("Deletion Denied");
-            alert.setHeaderText("Cannot Delete Administrator");
-            alert.setContentText("The primary 'admin' account cannot be deleted.");
-            alert.showAndWait();
+            showAlert(AlertType.ERROR, "Deletion Denied", "The primary 'admin' account cannot be deleted.");
             return;
         }
 
-        // 1. Show Confirmation Dialog
+
+        // Show Confirmation Dialog
         Alert confirmAlert = new Alert(AlertType.CONFIRMATION);
         confirmAlert.setTitle("Confirm Deletion");
         confirmAlert.setHeaderText("Permanently Delete User: " + selectedUser.getUsername() + "?");
@@ -253,44 +236,42 @@ public class UserController {
         Optional<ButtonType> result = confirmAlert.showAndWait();
 
         if (result.isPresent() && result.get() == ButtonType.OK) {
-            // 2. Perform MongoDB Deletion
             if (deleteUserFromMongo(selectedUser.getUsername())) {
-                // 3. Refresh the Table
                 refreshTable();
                 System.out.println("SUCCESS: User deleted: " + selectedUser.getUsername());
             } else {
-                // Display error if DB operation fails
-                Alert errorAlert = new Alert(AlertType.ERROR);
-                errorAlert.setTitle("Deletion Failed");
-                errorAlert.setHeaderText("Database Error");
-                errorAlert.setContentText("Failed to delete user from the database.");
-                errorAlert.showAndWait();
+                showAlert(AlertType.ERROR, "Deletion Failed", "Failed to delete user from the database.");
             }
         }
     }
 
     /**
      * Executes the MongoDB delete operation.
-     * @param username The username of the user to delete.
-     * @return true if deletion was successful, false otherwise.
      */
     private boolean deleteUserFromMongo(String username) {
         MongoDatabase db = MongoManager.connect();
         if (db == null) {
-            return false; // Connection failed
+            return false;
         }
 
         try {
             MongoCollection<Document> collection = db.getCollection("users");
-
-            // Delete the document where the 'username' field matches
             collection.deleteOne(Filters.eq("username", username));
-
             return true;
-
         } catch (MongoException e) {
             System.err.println("MongoDB Delete Error: " + e.getMessage());
             return false;
         }
+    }
+
+    /**
+     * Helper method to show JavaFX alerts easily.
+     */
+    private void showAlert(AlertType type, String title, String content) {
+        Alert alert = new Alert(type);
+        alert.setTitle(title);
+        alert.setHeaderText(null);
+        alert.setContentText(content);
+        alert.showAndWait();
     }
 }

@@ -16,9 +16,10 @@
     <Label text="User Management" style="-fx-font-weight: bold; -fx-font-size: 18px;" />
 
     <HBox spacing="10">
-        <Button fx:id="btnAddUser" text="Add New User" />
-        <Button fx:id="btnEditUser" text="Edit Selected" />
-        <Button fx:id="btnDeleteUser" text="Delete Selected" />
+        <!-- FIX: Added onAction attribute to link to UserController methods -->
+        <Button fx:id="btnAddUser" text="Add New User" onAction="#handleAddUser" />
+        <Button fx:id="btnEditUser" text="Edit Selected" onAction="#handleEditUser" />
+        <Button fx:id="btnDeleteUser" text="Delete Selected" onAction="#handleDeleteUser" />
     </HBox>
 
     <TableView fx:id="userTable" VBox.vgrow="ALWAYS">

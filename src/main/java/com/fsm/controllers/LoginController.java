@@ -5,9 +5,9 @@ import javafx.fxml.FXML;
 import javafx.scene.control.Label;
 import javafx.scene.control.PasswordField;
 import javafx.scene.control.TextField;
-import javafx.scene.Node; // Required for getScene().getWindow()
-import javafx.stage.Stage; // Required for close()
-import javafx.event.ActionEvent; // Required for the method signature
+import javafx.scene.Node;
+import javafx.stage.Stage;
+import javafx.event.ActionEvent;
 import org.bson.Document;
 import javafx.scene.Parent;
 import javafx.fxml.FXMLLoader;
@@ -22,7 +22,6 @@ public class LoginController {
 
     /**
      * Handles the login button click event.
-     * We pass ActionEvent to get access to the scene/window.
      */
     @FXML
     private void handleLoginButton(ActionEvent event) {
@@ -40,7 +39,7 @@ public class LoginController {
             // SUCCESS: Load the Main Dashboard
             try {
                 // CRITICAL STEP 1: Get the user's role from the authenticated document
-                String userRole = authenticatedUser.getString("role"); // Assuming the field name is "role"
+                String userRole = authenticatedUser.getString("role");
 
                 // 1. Get the current stage (login window)
                 Stage loginStage = (Stage)((Node) event.getSource()).getScene().getWindow();
@@ -52,8 +51,8 @@ public class LoginController {
                 // 3. Get the controller instance
                 MainDashboardController dashboardController = loader.getController();
 
-                // CRITICAL STEP 2: Pass the role data to the dashboard controller
-                dashboardController.initData(userRole);
+                // CRITICAL FIX: Now passing BOTH username and role to initData (Resolves Compilation Error 1)
+                dashboardController.initData(username, userRole);
 
                 // 4. Set up the new scene and stage
                 Stage mainStage = new Stage();
@@ -62,7 +61,8 @@ public class LoginController {
 
                 // 5. Load the default Surveys view *after* role restrictions are applied.
                 // Note: initData() applies restrictions, but we still need to load the first view.
-                dashboardController.loadDefaultView();
+                // This call relies on loadDefaultView() being PUBLIC in MainDashboardController.
+                dashboardController.loadDefaultView(); // (Resolves Compilation Error 2)
 
                 // 6. Show the main stage and close the login stage
                 mainStage.show();

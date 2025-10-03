@@ -15,39 +15,37 @@ import java.io.IOException;
 
 public class MainDashboardController {
 
-    // Inject the main BorderPane so we can load new content into its center
-    @FXML
-    private BorderPane rootPane;
-
-    // Inject the navigation buttons
+    @FXML private BorderPane rootPane;
     @FXML private Button btnSurveys;
     @FXML private Button btnUsers;
     @FXML private Button btnReports;
     @FXML private Button btnSettings;
     @FXML private AnchorPane mainContentArea;
 
+    // --- Fields to store logged-in user data ---
     private String currentUserRole;
+    private String currentLoggedInUsername;
 
-    // You can use an initialize method to set up the initial view or load data
     @FXML
     public void initialize() {
-        // 2. Setup button handlers.
-        // CRITICAL FIX: Use the dedicated decision method to load the correct view based on role
         btnSurveys.setOnAction(event -> loadSurveyDecisionView());
-
-        // We will call the dedicated loadUserView to apply restrictions inside that controller
         btnUsers.setOnAction(event -> loadUserView());
-
-        // FIX: The Reports button needs to load the report-view.fxml
         btnReports.setOnAction(e -> loadView("/com/fsm/report-view.fxml", "ReportController"));
-        btnSettings.setOnAction(e -> loadView("/com/fsm/settings-view.fxml", null)); // Use a real FXML path for consistency
+        btnSettings.setOnAction(e -> loadView("/com/fsm/settings-view.fxml", null));
     }
 
-    public void initData(String userRole) {
+    /**
+     * Initializes the dashboard with the logged-in user's credentials.
+     * This signature now matches the two-parameter call from LoginController.
+     */
+    public void initData(String username, String userRole) {
+        this.currentLoggedInUsername = username;
         this.currentUserRole = userRole;
+
+        System.out.println("Dashboard initialized for User: " + username + " with Role: " + userRole);
+
         applyRoleRestrictions();
-        // Load the default view after setting the role
-        loadDefaultView();
+        // loadDefaultView() will be called next by LoginController.
     }
 
     /**
@@ -58,7 +56,7 @@ public class MainDashboardController {
         boolean isReportUser = isAdmin || "Survey Creator".equals(currentUserRole);
 
         // USERS is restricted to Administrator
-        btnUsers.setManaged(isAdmin); // Hide the button completely
+        btnUsers.setManaged(isAdmin);
         btnUsers.setVisible(isAdmin);
 
         // REPORTS and SETTINGS are visible for Administrator and Survey Creator
@@ -70,64 +68,64 @@ public class MainDashboardController {
     }
 
     /**
+     * Public method called by LoginController to display the initial view.
+     * (Fixes the missing method error in the LoginController call)
+     */
+    public void loadDefaultView() {
+        loadSurveyDecisionView();
+    }
+
+    /**
      * Determines which 'Surveys' view to load based on the user's role.
      */
     private void loadSurveyDecisionView() {
-        // Data Entry users get the survey taking interface.
         if ("Data Entry".equals(currentUserRole)) {
-            // We load the SurveyTakerController, which will also need the user's role
-            loadViewWithRole("/com/fsm/survey-taker-view.fxml", "SurveyTakerController");
+            // Data Entry users need both role and username for the survey taking interface.
+            loadViewWithData("/com/fsm/survey-taker-view.fxml", "SurveyTakerController");
         } else {
             // Admins and Survey Creators get the management interface.
-            loadViewWithRole("/com/fsm/survey-view.fxml", "SurveyController");
+            loadViewWithData("/com/fsm/survey-view.fxml", "SurveyController");
         }
     }
 
 
-    // NEW METHOD: Loads User view and initializes it with the user's role
+    /**
+     * Loads the User view and initializes it with the user's role and username.
+     */
     private void loadUserView() {
-        // Since we are using setManaged/setVisible, we don't strictly need to check isDisable()
-        // but the check is a good safeguard against attempted bypass.
         if (!btnUsers.isVisible()) return;
-
-        loadViewWithRole("/com/fsm/user-view.fxml", "UserController");
+        // Pass both role and username to the UserController for security checks
+        loadViewWithData("/com/fsm/user-view.fxml", "UserController");
     }
 
     /**
      * A unified method for loading FXML views and initializing their controllers
-     * with the current user role.
+     * with the current user's role AND username.
      * @param fxmlPath The path to the FXML file.
      * @param controllerTypeHint Optional hint for the controller class name (e.g., "SurveyController").
      */
-    private void loadViewWithRole(String fxmlPath, String controllerTypeHint) {
+    private void loadViewWithData(String fxmlPath, String controllerTypeHint) {
         try {
-            // 1. Load the FXML resource
             FXMLLoader loader = new FXMLLoader(getClass().getResource(fxmlPath));
             Parent view = loader.load();
 
-            // 2. Pass the role to the controller if it's a known type
             Object controller = loader.getController();
 
-            if (controller != null && currentUserRole != null) {
+            if (controller != null) {
                 if ("SurveyController".equals(controllerTypeHint)) {
-                    // Note: Ensure SurveyController has an initData(String) method
                     ((SurveyController) controller).initData(this.currentUserRole);
                 } else if ("UserController".equals(controllerTypeHint)) {
-                    // Note: Ensure UserController has an initData(String) method
-                    ((UserController) controller).initData(this.currentUserRole);
+                    // CRITICAL: Pass BOTH role AND username to UserController
+                    ((UserController) controller).initData(this.currentUserRole, this.currentLoggedInUsername);
                 } else if ("SurveyTakerController".equals(controllerTypeHint)) {
-                    // Note: Ensure SurveyTakerController has an initData(String) method
+                    // Assuming initData(String role, String username) signature
                     ((SurveyTakerController) controller).initData(this.currentUserRole);
                 }
-                // NOTE: ReportController and other generic views don't require role injection here
-                // unless they use initData(String).
             }
 
-            // 3. Clear previous content and add the new view
             mainContentArea.getChildren().clear();
             mainContentArea.getChildren().add(view);
 
-            // 4. Anchor the new view to fill the entire AnchorPane (important!)
             AnchorPane.setTopAnchor(view, 0.0);
             AnchorPane.setBottomAnchor(view, 0.0);
             AnchorPane.setLeftAnchor(view, 0.0);
@@ -137,51 +135,23 @@ public class MainDashboardController {
             System.err.println("Error loading FXML view: " + fxmlPath + ". " + e.getMessage());
             e.printStackTrace();
             mainContentArea.getChildren().clear();
-            mainContentArea.getChildren().add(new Label("Error: Could not load screen from " + fxmlPath));
+            loadErrorView("Could not load screen from " + fxmlPath);
+        } catch (Exception e) {
+            System.err.println("Error initializing controller for view: " + fxmlPath + ". " + e.getMessage());
+            e.printStackTrace();
+            mainContentArea.getChildren().clear();
+            loadErrorView("Controller initialization failed for " + controllerTypeHint);
         }
     }
 
-    // The legacy loadSurveyView is now replaced by loadSurveyDecisionView
-    private void loadSurveyView() {
-        loadSurveyDecisionView();
-    }
-
-
-    private void loadWelcomeView() {
-        VBox welcomeBox = new VBox(20);
-        welcomeBox.setStyle("-fx-alignment: center;");
-        Label welcomeLabel = new Label("Select an option from the sidebar to begin managing data.");
-        welcomeLabel.setFont(new Font("System", 18));
-        welcomeBox.getChildren().add(welcomeLabel);
-
-        // CRITICAL: Load the VBox content directly into the AnchorPane
-        mainContentArea.getChildren().clear();
-        mainContentArea.getChildren().add(welcomeBox);
-
-        // Ensure the welcome content is anchored correctly within the AnchorPane
-        AnchorPane.setTopAnchor(welcomeBox, 0.0);
-        AnchorPane.setBottomAnchor(welcomeBox, 0.0);
-        AnchorPane.setLeftAnchor(welcomeBox, 0.0);
-        AnchorPane.setRightAnchor(welcomeBox, 0.0);
-    }
-
-    public void loadDefaultView() {
-        // Load the appropriate survey view on startup based on the role
-        loadSurveyDecisionView();
-    }
-
     /**
-     * Placeholder method to demonstrate loading content dynamically.
-     * Used for Reports and Settings views, and as a fallback for Users.
-     * @param fxmlPath The path to the FXML file.
-     * @param controllerTypeHint Optional hint for the controller class name (e.g., "ReportController").
+     * Placeholder method used for Reports and Settings views (handled as 'coming soon').
      */
     private void loadView(String fxmlPath, String controllerTypeHint) {
-        if (fxmlPath == null || "/com/fsm/settings-view.fxml".equals(fxmlPath)) {
-            // Handle "Coming Soon" for settings or unknown paths
+        if (fxmlPath.contains("settings-view.fxml")) {
+            // Handle "Coming Soon" for settings
             mainContentArea.getChildren().clear();
 
-            // Create a styled VBox for "Coming Soon"
             VBox comingSoonBox = new VBox(20);
             comingSoonBox.setStyle("-fx-alignment: center;");
             Label comingSoonLabel = new Label("Feature Coming Soon!");
@@ -196,7 +166,25 @@ public class MainDashboardController {
             return;
         }
 
-        // Use the unified loading method for generic paths
-        loadViewWithRole(fxmlPath, controllerTypeHint);
+        // Use the unified loading method for generic paths like Reports
+        loadViewWithData(fxmlPath, controllerTypeHint);
+    }
+
+    /**
+     * Displays a generic error message in the main content area.
+     * (This is the missing method that caused the 'cannot find symbol' error)
+     */
+    private void loadErrorView(String message) {
+        VBox errorBox = new VBox(20);
+        errorBox.setStyle("-fx-alignment: center;");
+        Label errorLabel = new Label("System Error: " + message);
+        errorLabel.setFont(new Font("System", 18));
+        errorBox.getChildren().add(errorLabel);
+
+        mainContentArea.getChildren().add(errorBox);
+        AnchorPane.setTopAnchor(errorBox, 0.0);
+        AnchorPane.setBottomAnchor(errorBox, 0.0);
+        AnchorPane.setLeftAnchor(errorBox, 0.0);
+        AnchorPane.setRightAnchor(errorBox, 0.0);
     }
 }
