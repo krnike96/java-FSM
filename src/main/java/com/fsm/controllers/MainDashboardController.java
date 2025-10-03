@@ -31,7 +31,8 @@ public class MainDashboardController {
         btnSurveys.setOnAction(event -> loadSurveyDecisionView());
         btnUsers.setOnAction(event -> loadUserView());
         btnReports.setOnAction(e -> loadView("/com/fsm/report-view.fxml", "ReportController"));
-        btnSettings.setOnAction(e -> loadView("/com/fsm/settings-view.fxml", null));
+        // Update: Call dedicated loadProfileSettingsView instead of generic loadView
+        btnSettings.setOnAction(e -> loadProfileSettingsView());
     }
 
     /**
@@ -55,16 +56,20 @@ public class MainDashboardController {
         boolean isAdmin = "Administrator".equals(currentUserRole);
         boolean isReportUser = isAdmin || "Survey Creator".equals(currentUserRole);
 
+        // FIX 1: Settings button should be visible for ALL users for self-service profile management.
+        boolean isSettingsUser = true; // All users can access settings
+
         // USERS is restricted to Administrator
         btnUsers.setManaged(isAdmin);
         btnUsers.setVisible(isAdmin);
 
-        // REPORTS and SETTINGS are visible for Administrator and Survey Creator
+        // REPORTS are visible for Administrator and Survey Creator
         btnReports.setManaged(isReportUser);
         btnReports.setVisible(isReportUser);
 
-        btnSettings.setManaged(isReportUser);
-        btnSettings.setVisible(isReportUser);
+        // Settings are now visible for everyone
+        btnSettings.setManaged(isSettingsUser);
+        btnSettings.setVisible(isSettingsUser);
     }
 
     /**
@@ -98,6 +103,15 @@ public class MainDashboardController {
     }
 
     /**
+     * NEW: Loads the Profile Settings view for users to change their own password/username.
+     */
+    private void loadProfileSettingsView() {
+        if (!btnSettings.isVisible()) return;
+        // The path to the new FXML file is assumed to be 'profile-settings-view.fxml'
+        loadViewWithData("/com/fsm/profile-settings-view.fxml", "ProfileSettingsController");
+    }
+
+    /**
      * A unified method for loading FXML views and initializing their controllers
      * with the current user's role AND username.
      * @param fxmlPath The path to the FXML file.
@@ -112,7 +126,7 @@ public class MainDashboardController {
 
             if (controller != null) {
                 if ("ReportController".equals(controllerTypeHint)) {
-                    // *** CRITICAL FIX: Initialize ReportController ***
+                    // Initialize ReportController
                     System.out.println("DEBUG: Initializing ReportController with Role: " + currentUserRole + ", Username: " + currentLoggedInUsername);
                     ((ReportController) controller).initData(this.currentUserRole, this.currentLoggedInUsername);
                 } else if ("SurveyController".equals(controllerTypeHint)) {
@@ -124,6 +138,9 @@ public class MainDashboardController {
                 } else if ("SurveyTakerController".equals(controllerTypeHint)) {
                     // Pass BOTH role AND username to SurveyTakerController
                     ((SurveyTakerController) controller).initData(this.currentUserRole, this.currentLoggedInUsername);
+                } else if ("ProfileSettingsController".equals(controllerTypeHint)) {
+                    // NEW: Pass BOTH role AND username to the ProfileSettingsController
+                    ((ProfileSettingsController) controller).initData(this.currentLoggedInUsername, this.currentUserRole);
                 }
             }
 
@@ -151,20 +168,8 @@ public class MainDashboardController {
      */
     private void loadView(String fxmlPath, String controllerTypeHint) {
         if (fxmlPath.contains("settings-view.fxml")) {
-            // Handle "Coming Soon" for settings
-            mainContentArea.getChildren().clear();
-
-            VBox comingSoonBox = new VBox(20);
-            comingSoonBox.setStyle("-fx-alignment: center;");
-            Label comingSoonLabel = new Label("Feature Coming Soon!");
-            comingSoonLabel.setFont(new Font("System", 24));
-            comingSoonBox.getChildren().add(comingSoonLabel);
-
-            mainContentArea.getChildren().add(comingSoonBox);
-            AnchorPane.setTopAnchor(comingSoonBox, 0.0);
-            AnchorPane.setBottomAnchor(comingSoonBox, 0.0);
-            AnchorPane.setLeftAnchor(comingSoonBox, 0.0);
-            AnchorPane.setRightAnchor(comingSoonBox, 0.0);
+            // The functionality has been moved to loadProfileSettingsView()
+            loadErrorView("The old settings-view.fxml path is deprecated. Please use btnSettings.");
             return;
         }
 

@@ -3,7 +3,7 @@ package com.fsm.controllers;
 import com.fsm.database.MongoManager;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
-import com.mongodb.client.model.Filters;
+import com.mongodb.client.model.Filters; // Import Filters
 import org.bson.Document;
 import javafx.fxml.FXML;
 import javafx.scene.control.*;
@@ -59,7 +59,6 @@ public class SurveyTakerController {
 
     /**
      * Initializes the controller with the logged-in user's data.
-     * FIX: Now accepts two arguments (username and role) to match the caller (MainDashboardController).
      * @param userRole The role of the current user.
      * @param username The username of the current user (used for logging responses).
      */
@@ -78,8 +77,12 @@ public class SurveyTakerController {
 
         try {
             MongoCollection<Document> surveyCollection = db.getCollection("surveys");
-            // NOTE: We should ideally filter to only show 'Active' surveys
-            for (Document doc : surveyCollection.find()) {
+
+            // FIX 2: Filter the surveys collection to only include documents where status is "Active"
+            Document filter = new Document("status", "Active");
+
+            // Iterate over the filtered results
+            for (Document doc : surveyCollection.find(filter)) {
                 String id = doc.getObjectId("_id").toHexString();
                 String name = doc.getString("name");
                 surveys.add(new SurveyItem(id, name));
