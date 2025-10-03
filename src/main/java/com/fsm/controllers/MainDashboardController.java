@@ -38,42 +38,44 @@ public class MainDashboardController {
         // We will call the dedicated loadUserView to apply restrictions inside that controller
         btnUsers.setOnAction(event -> loadUserView());
 
-        btnReports.setOnAction(e -> loadView("/com/fsm/report-view.fxml"));
-        btnSettings.setOnAction(e -> loadView(null)); // Use null to show "Coming Soon"
+        // FIX: The Reports button needs to load the report-view.fxml
+        btnReports.setOnAction(e -> loadView("/com/fsm/report-view.fxml", "ReportController"));
+        btnSettings.setOnAction(e -> loadView("/com/fsm/settings-view.fxml", null)); // Use a real FXML path for consistency
     }
 
     public void initData(String userRole) {
         this.currentUserRole = userRole;
         applyRoleRestrictions();
+        // Load the default view after setting the role
+        loadDefaultView();
     }
 
     /**
      * Checks the user's role and disables unauthorized navigation buttons.
      */
     private void applyRoleRestrictions() {
-        // We will use visibility to hide unauthorized buttons for a cleaner UI
         boolean isAdmin = "Administrator".equals(currentUserRole);
+        boolean isReportUser = isAdmin || "Survey Creator".equals(currentUserRole);
 
-        // USERS, REPORTS, and SETTINGS are restricted to Administrator
+        // USERS is restricted to Administrator
+        btnUsers.setManaged(isAdmin); // Hide the button completely
         btnUsers.setVisible(isAdmin);
-        btnUsers.setDisable(!isAdmin);
 
-        btnReports.setVisible(isAdmin);
-        btnReports.setDisable(!isAdmin); // Disable just in case it's still visible
+        // REPORTS and SETTINGS are visible for Administrator and Survey Creator
+        btnReports.setManaged(isReportUser);
+        btnReports.setVisible(isReportUser);
 
-        btnSettings.setVisible(isAdmin);
-        btnSettings.setDisable(!isAdmin);
+        btnSettings.setManaged(isReportUser);
+        btnSettings.setVisible(isReportUser);
     }
 
     /**
      * Determines which 'Surveys' view to load based on the user's role.
-     * This replaces the old loadSurveyView() method.
      */
     private void loadSurveyDecisionView() {
         // Data Entry users get the survey taking interface.
         if ("Data Entry".equals(currentUserRole)) {
             // We load the SurveyTakerController, which will also need the user's role
-            // for the submission logic (tracking who submitted the response).
             loadViewWithRole("/com/fsm/survey-taker-view.fxml", "SurveyTakerController");
         } else {
             // Admins and Survey Creators get the management interface.
@@ -84,11 +86,9 @@ public class MainDashboardController {
 
     // NEW METHOD: Loads User view and initializes it with the user's role
     private void loadUserView() {
-        // Only proceed with loading the view if the button is NOT disabled by RBAC
-        if (btnUsers.isDisable()) {
-            System.out.println("Access Denied: Non-administrator attempted to access User Management.");
-            return;
-        }
+        // Since we are using setManaged/setVisible, we don't strictly need to check isDisable()
+        // but the check is a good safeguard against attempted bypass.
+        if (!btnUsers.isVisible()) return;
 
         loadViewWithRole("/com/fsm/user-view.fxml", "UserController");
     }
@@ -110,14 +110,17 @@ public class MainDashboardController {
 
             if (controller != null && currentUserRole != null) {
                 if ("SurveyController".equals(controllerTypeHint)) {
+                    // Note: Ensure SurveyController has an initData(String) method
                     ((SurveyController) controller).initData(this.currentUserRole);
                 } else if ("UserController".equals(controllerTypeHint)) {
+                    // Note: Ensure UserController has an initData(String) method
                     ((UserController) controller).initData(this.currentUserRole);
                 } else if ("SurveyTakerController".equals(controllerTypeHint)) {
-                    // We need to pass the role and potentially the username to the new controller
-                    // for tracking who submits the response.
+                    // Note: Ensure SurveyTakerController has an initData(String) method
                     ((SurveyTakerController) controller).initData(this.currentUserRole);
                 }
+                // NOTE: ReportController and other generic views don't require role injection here
+                // unless they use initData(String).
             }
 
             // 3. Clear previous content and add the new view
@@ -170,16 +173,30 @@ public class MainDashboardController {
     /**
      * Placeholder method to demonstrate loading content dynamically.
      * Used for Reports and Settings views, and as a fallback for Users.
+     * @param fxmlPath The path to the FXML file.
+     * @param controllerTypeHint Optional hint for the controller class name (e.g., "ReportController").
      */
-    private void loadView(String fxmlPath) {
-        if (fxmlPath == null) {
-            // Clear content if a null path is passed (e.g., for a TO-DO button)
+    private void loadView(String fxmlPath, String controllerTypeHint) {
+        if (fxmlPath == null || "/com/fsm/settings-view.fxml".equals(fxmlPath)) {
+            // Handle "Coming Soon" for settings or unknown paths
             mainContentArea.getChildren().clear();
-            mainContentArea.getChildren().add(new Label("Feature Coming Soon!"));
+
+            // Create a styled VBox for "Coming Soon"
+            VBox comingSoonBox = new VBox(20);
+            comingSoonBox.setStyle("-fx-alignment: center;");
+            Label comingSoonLabel = new Label("Feature Coming Soon!");
+            comingSoonLabel.setFont(new Font("System", 24));
+            comingSoonBox.getChildren().add(comingSoonLabel);
+
+            mainContentArea.getChildren().add(comingSoonBox);
+            AnchorPane.setTopAnchor(comingSoonBox, 0.0);
+            AnchorPane.setBottomAnchor(comingSoonBox, 0.0);
+            AnchorPane.setLeftAnchor(comingSoonBox, 0.0);
+            AnchorPane.setRightAnchor(comingSoonBox, 0.0);
             return;
         }
 
         // Use the unified loading method for generic paths
-        loadViewWithRole(fxmlPath, null);
+        loadViewWithRole(fxmlPath, controllerTypeHint);
     }
 }
