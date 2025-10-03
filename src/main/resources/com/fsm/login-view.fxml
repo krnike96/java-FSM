@@ -7,6 +7,7 @@
 <?import javafx.scene.control.TextField?>
 <?import javafx.scene.layout.VBox?>
 <?import javafx.scene.text.Font?>
+<?import javafx.scene.control.ComboBox?> <!-- Import ComboBox -->
 
 <VBox alignment="TOP_CENTER" spacing="15.0"
       xmlns:fx="http://javafx.com/fxml/1"
@@ -23,7 +24,10 @@
         </font>
     </Label>
 
-    <Label text="Please sign in" />
+    <Label text="Please select your role and sign in" /> <!-- Updated prompt -->
+
+    <!-- NEW: Role Selection ComboBox -->
+    <ComboBox fx:id="roleComboBox" promptText="Select Role" prefWidth="200.0" />
 
     <TextField fx:id="usernameField" promptText="Username" />
     <PasswordField fx:id="passwordField" promptText="Password" />

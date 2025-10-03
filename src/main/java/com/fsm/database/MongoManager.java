@@ -9,6 +9,11 @@ import com.mongodb.client.result.UpdateResult;
 import org.bson.Document;
 import org.mindrot.jbcrypt.BCrypt;
 
+// New imports for combining filters
+import org.bson.conversions.Bson;
+import com.mongodb.client.model.Filters;
+
+
 public class MongoManager {
 
     private static final String CONNECTION_STRING = "mongodb://localhost:27017/";
@@ -41,7 +46,7 @@ public class MongoManager {
     }
 
     /**
-     * NEW: Compares a plain text password against a stored BCrypt hash.
+     * Compares a plain text password against a stored BCrypt hash.
      * @param plainPassword The password entered by the user (plain text).
      * @param storedHash The hashed password stored in the database.
      * @return true if the password matches the hash, false otherwise.
@@ -59,7 +64,7 @@ public class MongoManager {
     }
 
     /**
-     * NEW: Finds a single user document by username. Used for profile updates and verification.
+     * Finds a single user document by username. Used for profile updates and verification.
      * @param username The username to search for.
      * @return The user Document, or null if not found or connection failed.
      */
@@ -77,7 +82,7 @@ public class MongoManager {
     }
 
     /**
-     * NEW: Updates a user's username in the database.
+     * Updates a user's username in the database.
      * @param oldUsername The current username.
      * @param newUsername The new username.
      * @return true if the update was successful, false otherwise.
@@ -110,7 +115,7 @@ public class MongoManager {
     }
 
     /**
-     * NEW: Updates a user's hashed password in the database.
+     * Updates a user's hashed password in the database.
      * @param username The username of the user to update.
      * @param newHashedPassword The new BCrypt hashed password.
      * @return true if the update was successful, false otherwise.
@@ -144,13 +149,14 @@ public class MongoManager {
 
 
     /**
-     * Authenticates a user against the 'users' collection by verifying the plain password
-     * against the stored BCrypt hash.
+     * UPDATED: Authenticates a user against the 'users' collection by verifying the plain password,
+     * username, AND the specified role against the stored BCrypt hash.
      * @param username The username entered by the user.
      * @param password The password entered by the user (plain text).
+     * @param role The role selected by the user (Administrator, Survey Creator, or Data Entry).
      * @return A Document representing the user if login is successful, or null otherwise.
      */
-    public static Document authenticateUser(String username, String password) {
+    public static Document authenticateUser(String username, String password, String role) {
         MongoDatabase db = connect();
 
         if (db == null) {
@@ -160,8 +166,13 @@ public class MongoManager {
         try {
             MongoCollection<Document> userCollection = db.getCollection("users");
 
-            // STEP 1: Find user by username only
-            Document userDoc = userCollection.find(Filters.eq("username", username)).first();
+            // STEP 1: Find user by combined criteria: username AND role
+            Bson filter = Filters.and(
+                    Filters.eq("username", username),
+                    Filters.eq("role", role)
+            );
+
+            Document userDoc = userCollection.find(filter).first();
 
             if (userDoc != null) {
                 String storedHashedPassword = userDoc.getString("password");
@@ -169,13 +180,13 @@ public class MongoManager {
                 // STEP 2: Use BCrypt.checkpw to safely compare the plain password
                 // with the stored hash.
                 if (BCrypt.checkpw(password, storedHashedPassword)) {
-                    System.out.println("✅ Login Successful for user: " + username);
+                    System.out.println("✅ Login Successful for user: " + username + " with role: " + role);
                     return userDoc; // Authentication successful
                 }
             }
 
-            // If user is null or password verification failed:
-            System.out.println("❌ Login Failed: Invalid credentials for user: " + username);
+            // If user is null (no user found with that username AND role) or password verification failed:
+            System.out.println("❌ Login Failed: Invalid credentials or role for user: " + username);
             return null;
 
         } catch (Exception e) {

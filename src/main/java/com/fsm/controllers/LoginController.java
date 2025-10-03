@@ -5,6 +5,7 @@ import javafx.fxml.FXML;
 import javafx.scene.control.Label;
 import javafx.scene.control.PasswordField;
 import javafx.scene.control.TextField;
+import javafx.scene.control.ComboBox; // Import ComboBox
 import javafx.scene.Node;
 import javafx.stage.Stage;
 import javafx.event.ActionEvent;
@@ -13,12 +14,26 @@ import javafx.scene.Parent;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Scene;
 import java.io.IOException;
+import java.util.Arrays; // Import Arrays for ComboBox list
 
 public class LoginController {
 
     @FXML private TextField usernameField;
     @FXML private PasswordField passwordField;
     @FXML private Label statusLabel;
+    @FXML private ComboBox<String> roleComboBox; // NEW: Inject the role selection ComboBox
+
+    @FXML
+    public void initialize() {
+        // Populate the ComboBox with the defined user roles
+        roleComboBox.getItems().addAll(
+                "Administrator",
+                "Survey Creator",
+                "Data Entry"
+        );
+        // Pre-select Administrator as a common default, or leave blank (using promptText)
+        // Leaving it blank forces the user to choose, which is better UX for this requirement.
+    }
 
     /**
      * Handles the login button click event.
@@ -27,18 +42,25 @@ public class LoginController {
     private void handleLoginButton(ActionEvent event) {
         String username = usernameField.getText().trim();
         String password = passwordField.getText();
+        String selectedRole = roleComboBox.getValue(); // NEW: Get the selected role
+
+        if (selectedRole == null) {
+            statusLabel.setText("Please select your role.");
+            return;
+        }
 
         if (username.isEmpty() || password.isEmpty()) {
             statusLabel.setText("Please enter both username and password.");
             return;
         }
 
-        Document authenticatedUser = MongoManager.authenticateUser(username, password);
+        // IMPORTANT: Now calling the updated authentication method with the selected role
+        Document authenticatedUser = MongoManager.authenticateUser(username, password, selectedRole);
 
         if (authenticatedUser != null) {
             // SUCCESS: Load the Main Dashboard
             try {
-                // CRITICAL STEP 1: Get the user's role from the authenticated document
+                // The role is already known (selectedRole), but we confirm it matches the document
                 String userRole = authenticatedUser.getString("role");
 
                 // 1. Get the current stage (login window)
@@ -51,7 +73,7 @@ public class LoginController {
                 // 3. Get the controller instance
                 MainDashboardController dashboardController = loader.getController();
 
-                // CRITICAL FIX: Now passing BOTH username and role to initData (Resolves Compilation Error 1)
+                // Pass the credentials to the dashboard controller
                 dashboardController.initData(username, userRole);
 
                 // 4. Set up the new scene and stage
@@ -60,9 +82,7 @@ public class LoginController {
                 mainStage.setScene(new Scene(root, 800, 600));
 
                 // 5. Load the default Surveys view *after* role restrictions are applied.
-                // Note: initData() applies restrictions, but we still need to load the first view.
-                // This call relies on loadDefaultView() being PUBLIC in MainDashboardController.
-                dashboardController.loadDefaultView(); // (Resolves Compilation Error 2)
+                dashboardController.loadDefaultView();
 
                 // 6. Show the main stage and close the login stage
                 mainStage.show();
@@ -74,8 +94,10 @@ public class LoginController {
             }
 
         } else {
-            // FAILURE: Login failed
-            statusLabel.setText("Invalid username or password. Please try again.");
+            // FAILURE: Login failed. The error will now occur if:
+            // 1. Username/Password is wrong.
+            // 2. The provided role does not match the role stored in the database for that user.
+            statusLabel.setText("Invalid credentials or role mismatch. Please try again.");
             passwordField.clear();
         }
     }
