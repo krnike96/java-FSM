@@ -20,15 +20,14 @@
             <menus>
                 <Menu text="File">
                     <items>
-                        <!-- ADDED fx:id AND onAction -->
                         <MenuItem fx:id="menuItemLogout" text="Logout" onAction="#handleLogout" />
-                        <!-- ADDED fx:id AND onAction -->
                         <MenuItem fx:id="menuItemExit" text="Exit" onAction="#handleExit" />
                     </items>
                 </Menu>
                 <Menu text="Help">
                     <items>
-                        <MenuItem text="About" />
+                        <!-- ADDED fx:id AND onAction -->
+                        <MenuItem fx:id="menuItemAbout" text="About" onAction="#handleAbout" />
                     </items>
                 </Menu>
             </menus>

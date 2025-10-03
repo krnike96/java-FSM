@@ -1,6 +1,6 @@
 package com.fsm.controllers;
 
-import com.fsm.MainApplication; // Import MainApplication
+import com.fsm.MainApplication;
 import javafx.fxml.FXML;
 import javafx.scene.control.Button;
 import javafx.scene.layout.BorderPane;
@@ -8,12 +8,19 @@ import javafx.scene.layout.VBox;
 import javafx.scene.control.Label;
 import javafx.scene.text.Font;
 import javafx.scene.layout.AnchorPane;
-import javafx.scene.control.MenuItem; // Import MenuItem
-import javafx.application.Platform; // Import Platform for Exit
+import javafx.scene.control.MenuItem;
+import javafx.application.Platform;
 
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
+import javafx.scene.Scene;
+import javafx.stage.Stage;
+import javafx.stage.Modality;
 import java.io.IOException;
+
+// Import specific controllers we need to cast to
+// NOTE: These controllers must exist with an 'initData(String role, String username)' or similar method.
+// We import them here so we can cast and call their methods.
 
 public class MainDashboardController {
 
@@ -24,9 +31,10 @@ public class MainDashboardController {
     @FXML private Button btnSettings;
     @FXML private AnchorPane mainContentArea;
 
-    // NEW: Inject MenuItems from FXML
+    // Inject MenuItems from FXML
     @FXML private MenuItem menuItemLogout;
     @FXML private MenuItem menuItemExit;
+    @FXML private MenuItem menuItemAbout;
 
     // --- Fields to store logged-in user data ---
     private String currentUserRole;
@@ -34,14 +42,20 @@ public class MainDashboardController {
 
     @FXML
     public void initialize() {
+        // 1. Surveys: Use the decision method to load the correct view based on role
         btnSurveys.setOnAction(event -> loadSurveyDecisionView());
+
+        // 2. Users: Use the dedicated loading method for Admin-only view
         btnUsers.setOnAction(event -> loadUserView());
-        btnReports.setOnAction(e -> loadView("/com/fsm/report-view.fxml", "ReportController"));
-        // Update: Call dedicated loadProfileSettingsView instead of generic loadView
-        btnSettings.setOnAction(e -> loadProfileSettingsView());
+
+        // 3. Reports: Use the unified loader, hint: ReportController
+        btnReports.setOnAction(event -> loadViewWithData("/com/fsm/report-view.fxml", "ReportController"));
+
+        // 4. Settings: Use the dedicated loading method for profile settings
+        btnSettings.setOnAction(event -> loadProfileSettingsView());
     }
 
-    // --- NEW: Handle Logout and Exit ---
+    // --- Handle Logout and Exit ---
 
     /**
      * Handles the 'Logout' menu item click. Closes the current dashboard stage
@@ -62,7 +76,34 @@ public class MainDashboardController {
         Platform.exit();
     }
 
-    // --- End NEW: Handle Logout and Exit ---
+    // --- Handle About Dialog ---
+    /**
+     * Handles the 'About' menu item click. Displays a simple modal dialog
+     * with application information.
+     */
+    @FXML
+    private void handleAbout() {
+        try {
+            FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/fsm/about-view.fxml"));
+            Parent root = loader.load();
+
+            Stage dialogStage = new Stage();
+            dialogStage.setTitle("About Field Survey Manager");
+            dialogStage.initModality(Modality.APPLICATION_MODAL);
+            dialogStage.initOwner(rootPane.getScene().getWindow());
+
+            Scene scene = new Scene(root);
+            dialogStage.setScene(scene);
+
+            dialogStage.showAndWait();
+
+        } catch (IOException e) {
+            System.err.println("Error loading About dialog: " + e.getMessage());
+            e.printStackTrace();
+            loadErrorView("Could not load About screen.");
+        }
+    }
+    // --- End Handle About Dialog ---
 
 
     /**
@@ -86,8 +127,8 @@ public class MainDashboardController {
         boolean isAdmin = "Administrator".equals(currentUserRole);
         boolean isReportUser = isAdmin || "Survey Creator".equals(currentUserRole);
 
-        // FIX 1: Settings button should be visible for ALL users for self-service profile management.
-        boolean isSettingsUser = true; // All users can access settings
+        // Settings button should be visible for ALL users for self-service profile management.
+        boolean isSettingsUser = true;
 
         // USERS is restricted to Administrator
         btnUsers.setManaged(isAdmin);
@@ -127,16 +168,19 @@ public class MainDashboardController {
      * Loads the User view and initializes it with the user's role and username.
      */
     private void loadUserView() {
-        if (!btnUsers.isVisible()) return;
+        if (!btnUsers.isVisible()) {
+            loadErrorView("Access Denied: Only Administrators can access User Management.");
+            return;
+        }
         // Pass both role and username to the UserController for security checks
         loadViewWithData("/com/fsm/user-view.fxml", "UserController");
     }
 
     /**
-     * NEW: Loads the Profile Settings view for users to change their own password/username.
+     * Loads the Profile Settings view for users to change their own password/username.
      */
     private void loadProfileSettingsView() {
-        if (!btnSettings.isVisible()) return;
+        if (!btnSettings.isVisible()) return; // Should not happen but good safeguard
         // The path to the new FXML file is assumed to be 'profile-settings-view.fxml'
         loadViewWithData("/com/fsm/profile-settings-view.fxml", "ProfileSettingsController");
     }
@@ -154,23 +198,38 @@ public class MainDashboardController {
 
             Object controller = loader.getController();
 
+            // CRITICAL FIX: Implement the actual controller initialization call
             if (controller != null) {
-                if ("ReportController".equals(controllerTypeHint)) {
-                    // Initialize ReportController
-                    System.out.println("DEBUG: Initializing ReportController with Role: " + currentUserRole + ", Username: " + currentLoggedInUsername);
-                    ((ReportController) controller).initData(this.currentUserRole, this.currentLoggedInUsername);
-                } else if ("SurveyController".equals(controllerTypeHint)) {
-                    // Pass BOTH role AND username to the SurveyController
-                    ((SurveyController) controller).initData(this.currentUserRole, this.currentLoggedInUsername);
-                } else if ("UserController".equals(controllerTypeHint)) {
-                    // Pass BOTH role AND username to UserController
-                    ((UserController) controller).initData(this.currentUserRole, this.currentLoggedInUsername);
-                } else if ("SurveyTakerController".equals(controllerTypeHint)) {
-                    // Pass BOTH role AND username to SurveyTakerController
-                    ((SurveyTakerController) controller).initData(this.currentUserRole, this.currentLoggedInUsername);
-                } else if ("ProfileSettingsController".equals(controllerTypeHint)) {
-                    // NEW: Pass BOTH role AND username to the ProfileSettingsController
-                    ((ProfileSettingsController) controller).initData(this.currentLoggedInUsername, this.currentUserRole);
+                // All controllers are expected to have a method like:
+                // initData(String userRole, String username)
+
+                System.out.println("DEBUG: Initializing " + controllerTypeHint + " with Role: " + currentUserRole + ", Username: " + currentLoggedInUsername);
+
+                // Use a switch-like structure or if-else chain to safely cast and call initData
+                switch (controllerTypeHint) {
+                    case "ReportController":
+                        // Assuming ReportController has initData(String userRole, String username)
+                        ((ReportController) controller).initData(this.currentUserRole, this.currentLoggedInUsername);
+                        break;
+                    case "SurveyController":
+                        // Assuming SurveyController has initData(String userRole, String username)
+                        ((SurveyController) controller).initData(this.currentUserRole, this.currentLoggedInUsername);
+                        break;
+                    case "UserController":
+                        // Assuming UserController has initData(String userRole, String username)
+                        ((UserController) controller).initData(this.currentUserRole, this.currentLoggedInUsername);
+                        break;
+                    case "SurveyTakerController":
+                        // Assuming SurveyTakerController has initData(String userRole, String username)
+                        ((SurveyTakerController) controller).initData(this.currentUserRole, this.currentLoggedInUsername);
+                        break;
+                    case "ProfileSettingsController":
+                        // Assuming ProfileSettingsController has initData(String username, String userRole)
+                        ((ProfileSettingsController) controller).initData(this.currentLoggedInUsername, this.currentUserRole);
+                        break;
+                    default:
+                        System.err.println("WARNING: Unknown controller type or missing initData implementation: " + controllerTypeHint);
+                        break;
                 }
             }
 
@@ -186,6 +245,10 @@ public class MainDashboardController {
             System.err.println("Error loading FXML view: " + fxmlPath + ". " + e.getMessage());
             e.printStackTrace();
             loadErrorView("Could not load screen from " + fxmlPath);
+        } catch (ClassCastException e) {
+            System.err.println("Controller Type Mismatch: Failed to cast controller for " + controllerTypeHint + ". Ensure the controller is imported and linked correctly.");
+            e.printStackTrace();
+            loadErrorView("Controller initialization failed (Type Mismatch) for " + controllerTypeHint);
         } catch (Exception e) {
             System.err.println("Error initializing controller for view: " + fxmlPath + ". " + e.getMessage());
             e.printStackTrace();
@@ -194,17 +257,12 @@ public class MainDashboardController {
     }
 
     /**
-     * Placeholder method used for Reports and Settings views (handled as 'coming soon').
+     * Placeholder method for deprecated paths. Now redirects to loadErrorView.
      */
     private void loadView(String fxmlPath, String controllerTypeHint) {
-        if (fxmlPath.contains("settings-view.fxml")) {
-            // The functionality has been moved to loadProfileSettingsView()
-            loadErrorView("The old settings-view.fxml path is deprecated. Please use btnSettings.");
-            return;
-        }
-
-        // Use the unified loading method for generic paths like Reports
-        loadViewWithData(fxmlPath, controllerTypeHint);
+        // This method is now effectively deprecated and redirects to an error or the proper method.
+        // It was causing issues when called by old button handlers.
+        loadErrorView("Deprecated method 'loadView' called. Check button action handlers.");
     }
 
     /**
