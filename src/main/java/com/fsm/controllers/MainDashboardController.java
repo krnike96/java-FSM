@@ -1,6 +1,6 @@
 package com.fsm.controllers;
 
-import com.fsm.database.MongoManager;
+import com.fsm.MainApplication; // Import MainApplication
 import javafx.fxml.FXML;
 import javafx.scene.control.Button;
 import javafx.scene.layout.BorderPane;
@@ -8,6 +8,8 @@ import javafx.scene.layout.VBox;
 import javafx.scene.control.Label;
 import javafx.scene.text.Font;
 import javafx.scene.layout.AnchorPane;
+import javafx.scene.control.MenuItem; // Import MenuItem
+import javafx.application.Platform; // Import Platform for Exit
 
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
@@ -22,6 +24,10 @@ public class MainDashboardController {
     @FXML private Button btnSettings;
     @FXML private AnchorPane mainContentArea;
 
+    // NEW: Inject MenuItems from FXML
+    @FXML private MenuItem menuItemLogout;
+    @FXML private MenuItem menuItemExit;
+
     // --- Fields to store logged-in user data ---
     private String currentUserRole;
     private String currentLoggedInUsername;
@@ -34,6 +40,30 @@ public class MainDashboardController {
         // Update: Call dedicated loadProfileSettingsView instead of generic loadView
         btnSettings.setOnAction(e -> loadProfileSettingsView());
     }
+
+    // --- NEW: Handle Logout and Exit ---
+
+    /**
+     * Handles the 'Logout' menu item click. Closes the current dashboard stage
+     * and triggers the MainApplication to reload the login view.
+     */
+    @FXML
+    private void handleLogout() {
+        System.out.println("User " + currentLoggedInUsername + " logging out.");
+        MainApplication.showLoginScreen(rootPane.getScene().getWindow());
+    }
+
+    /**
+     * Handles the 'Exit' menu item click. Shuts down the JavaFX application.
+     */
+    @FXML
+    private void handleExit() {
+        System.out.println("Exiting application.");
+        Platform.exit();
+    }
+
+    // --- End NEW: Handle Logout and Exit ---
+
 
     /**
      * Initializes the dashboard with the logged-in user's credentials.

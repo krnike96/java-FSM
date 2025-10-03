@@ -20,8 +20,10 @@
             <menus>
                 <Menu text="File">
                     <items>
-                        <MenuItem text="Logout" />
-                        <MenuItem text="Exit" />
+                        <!-- ADDED fx:id AND onAction -->
+                        <MenuItem fx:id="menuItemLogout" text="Logout" onAction="#handleLogout" />
+                        <!-- ADDED fx:id AND onAction -->
+                        <MenuItem fx:id="menuItemExit" text="Exit" onAction="#handleExit" />
                     </items>
                 </Menu>
                 <Menu text="Help">
