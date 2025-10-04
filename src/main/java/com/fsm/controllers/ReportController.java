@@ -8,10 +8,17 @@ import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
+import javafx.scene.Parent;
+import javafx.scene.chart.BarChart;
+import javafx.scene.chart.CategoryAxis;
+import javafx.scene.chart.NumberAxis;
+import javafx.scene.chart.PieChart;
+import javafx.scene.chart.XYChart;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.layout.AnchorPane;
-import javafx.scene.Parent;
+import javafx.scene.layout.StackPane; // Added for chart container
+import javafx.scene.layout.VBox; // Added VBox for visualization panel
 import javafx.event.ActionEvent;
 
 // Imports for CSV Export
@@ -29,12 +36,8 @@ import org.bson.types.ObjectId;
 
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
+import java.util.stream.Collectors;
 
 public class ReportController {
 
@@ -49,11 +52,9 @@ public class ReportController {
         private final String dateCreated;
         private final int totalResponses;
 
-        // Formatter for display
         private static final DateTimeFormatter DATE_FORMAT =
                 DateTimeFormatter.ofPattern("yyyy-MM-dd").withZone(ZoneId.systemDefault());
 
-        // Constructor updated to take ID
         public ReportSurvey(String id, String name, String status, int numQuestions, Date dateCreated, int totalResponses) {
             this.id = id;
             this.name = name;
@@ -63,14 +64,34 @@ public class ReportController {
             this.totalResponses = totalResponses;
         }
 
-        // Getter for ID (CRITICAL for detail view)
         public String getId() { return id; }
-        // Standard Getters (required for TableView PropertyValueFactory)
         public String getName() { return name; }
         public String getStatus() { return status; }
         public int getNumQuestions() { return numQuestions; }
         public String getDateCreated() { return dateCreated; }
         public int getTotalResponses() { return totalResponses; }
+    }
+    // -----------------------------------------------------------
+
+    // -----------------------------------------------------------
+    // Nested Model Class: To hold Question Metadata
+    // -----------------------------------------------------------
+    private static class QuestionMetadata {
+        final String id;
+        final String text;
+        final String type; // e.g., TEXT_INPUT, MULTI_CHOICE, RATING
+
+        public QuestionMetadata(String id, String text, String type) {
+            this.id = id;
+            this.text = text;
+            this.type = type;
+        }
+
+        @Override
+        public String toString() {
+            // This is what appears in the ComboBox
+            return text;
+        }
     }
     // -----------------------------------------------------------
 
@@ -81,10 +102,16 @@ public class ReportController {
     @FXML private TableColumn<ReportSurvey, String> colDateCreated;
     @FXML private TableColumn<ReportSurvey, Integer> colTotalResponses;
     @FXML private Button btnViewDetails;
-    // NEW: Inject the Export button
     @FXML private Button btnExportCSV;
 
-    @FXML private AnchorPane reportContainer;
+    // --- Visualization FXML Bindings (NEW) ---
+    @FXML private VBox visualizationPanel;
+    @FXML private ComboBox<QuestionMetadata> cbxQuestions;
+    @FXML private StackPane chartContainer;
+    @FXML private Label lblChartMessage;
+
+    private List<QuestionMetadata> currentSurveyQuestions = new ArrayList<>(); // Questions for the selected survey
+    // -----------------------------------------
 
     private String currentUserRole;
     private String currentUsername;
@@ -98,7 +125,6 @@ public class ReportController {
         this.currentUserRole = userRole;
         this.currentUsername = username;
         System.out.println("INIT_DATA: Received Role: " + userRole + ", Username: " + username);
-        // Load data only after user information is set
         loadReportData();
     }
 
@@ -114,18 +140,221 @@ public class ReportController {
         // 2. Set the data source
         surveyReportTable.setItems(reportData);
 
-        // Disable detail button until a survey is selected
+        // Disable buttons initially
         btnViewDetails.setDisable(true);
-        // NEW: Disable export button until data is loaded
-        // It will be re-enabled in loadReportData if data exists
         if (btnExportCSV != null) {
             btnExportCSV.setDisable(true);
         }
+        visualizationPanel.setVisible(false);
+        visualizationPanel.setManaged(false);
 
+        // 3. Listener for survey selection (CRITICAL for visualization)
         surveyReportTable.getSelectionModel().selectedItemProperty().addListener((obs, oldVal, newVal) -> {
-            btnViewDetails.setDisable(newVal == null);
+            boolean isSelected = newVal != null;
+            btnViewDetails.setDisable(!isSelected);
+
+            // Show visualization panel and load questions when a survey is selected
+            if (isSelected) {
+                loadQuestionsForVisualization(newVal.getId());
+                visualizationPanel.setVisible(true);
+                visualizationPanel.setManaged(true);
+            } else {
+                visualizationPanel.setVisible(false);
+                visualizationPanel.setManaged(false);
+                cbxQuestions.getItems().clear();
+                chartContainer.getChildren().clear();
+            }
         });
     }
+
+    // --- Visualization Logic START ---
+
+    /**
+     * Loads the questions for the selected survey to populate the ComboBox.
+     */
+    private void loadQuestionsForVisualization(String surveyId) {
+        currentSurveyQuestions.clear();
+        cbxQuestions.getItems().clear();
+        chartContainer.getChildren().clear();
+        lblChartMessage.setText("Select a question from the dropdown to see the chart.");
+
+        MongoDatabase db = MongoManager.connect();
+        if (db == null) return;
+
+        try {
+            MongoCollection<Document> surveyCollection = db.getCollection("surveys");
+            Document surveyDoc = surveyCollection.find(Filters.eq("_id", new ObjectId(surveyId))).first();
+
+            if (surveyDoc != null) {
+                List<Document> questions = surveyDoc.getList("questions", Document.class, new ArrayList<>());
+
+                // Only visualize questions that are of type MULTI_CHOICE, RATING, or TEXT_INPUT (if we count unique answers)
+                for (Document q : questions) {
+                    String type = q.getString("type");
+                    // We only provide visualization for categorical/rating types initially
+                    if ("MULTI_CHOICE".equals(type) || "SINGLE_CHOICE".equals(type) || "RATING".equals(type)) {
+                        QuestionMetadata metadata = new QuestionMetadata(
+                                q.getString("id"),
+                                q.getString("text"),
+                                type
+                        );
+                        currentSurveyQuestions.add(metadata);
+                    }
+                }
+            }
+
+            cbxQuestions.getItems().setAll(currentSurveyQuestions);
+            cbxQuestions.getSelectionModel().clearSelection();
+
+        } catch (Exception e) {
+            System.err.println("Error loading questions for visualization: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Handles the selection of a question from the ComboBox and generates the chart.
+     */
+    @FXML
+    private void handleQuestionSelected(ActionEvent event) {
+        QuestionMetadata selectedQuestion = cbxQuestions.getSelectionModel().getSelectedItem();
+        ReportSurvey selectedSurvey = surveyReportTable.getSelectionModel().getSelectedItem();
+
+        if (selectedQuestion == null || selectedSurvey == null) {
+            return;
+        }
+
+        generateReportChart(selectedSurvey.getId(), selectedQuestion);
+    }
+
+    /**
+     * Fetches responses for the selected question and generates a PieChart or BarChart.
+     */
+    private void generateReportChart(String surveyId, QuestionMetadata question) {
+        MongoDatabase db = MongoManager.connect();
+        if (db == null) return;
+
+        // 1. Fetch responses for the selected survey
+        MongoCollection<Document> responseCollection = db.getCollection("responses");
+        Map<String, Integer> answerCounts = new HashMap<>();
+        int totalResponsesWithAnswer = 0;
+
+        try {
+            for (Document responseDoc : responseCollection.find(Filters.eq("survey_id", new ObjectId(surveyId)))) {
+                List<Document> answers = responseDoc.getList("answers", Document.class, new ArrayList<>());
+
+                // Find the answer corresponding to the selected question ID
+                Optional<Document> answerDocOpt = answers.stream()
+                        .filter(a -> question.id.equals(a.getString("question_id")))
+                        .findFirst();
+
+                if (answerDocOpt.isPresent()) {
+                    Object answerObj = answerDocOpt.get().get("answer");
+                    if (answerObj != null) {
+                        String answer = answerObj.toString();
+
+                        // Handle MULTI_CHOICE (stored as list/array)
+                        if (answer.startsWith("[") && answer.endsWith("]")) {
+                            // Simple parsing to split array elements
+                            String innerAnswers = answer.substring(1, answer.length() - 1);
+                            String[] individualAnswers = innerAnswers.split(",\\s*");
+                            for (String item : individualAnswers) {
+                                String cleanItem = item.trim().replace("\"", "");
+                                if (!cleanItem.isEmpty()) {
+                                    answerCounts.merge(cleanItem, 1, Integer::sum);
+                                    totalResponsesWithAnswer++; // Count each selected item
+                                }
+                            }
+                        } else {
+                            // Handle SINGLE_CHOICE or RATING
+                            answerCounts.merge(answer, 1, Integer::sum);
+                            totalResponsesWithAnswer++;
+                        }
+                    }
+                }
+            }
+
+            // 2. Clear container and display chart
+            chartContainer.getChildren().clear();
+
+            if (totalResponsesWithAnswer == 0) {
+                lblChartMessage.setText("No responses found for this question.");
+                chartContainer.getChildren().add(lblChartMessage);
+                return;
+            }
+
+            // Determine chart type based on question type
+            if ("RATING".equals(question.type)) {
+                // RATING: Use BarChart for better comparison of ordered categories
+                BarChart<String, Number> barChart = createBarChart(question.text, answerCounts);
+                chartContainer.getChildren().add(barChart);
+            } else {
+                // MULTI_CHOICE/SINGLE_CHOICE: Use PieChart for part-to-whole view
+                PieChart pieChart = createPieChart(question.text, answerCounts, totalResponsesWithAnswer);
+                chartContainer.getChildren().add(pieChart);
+            }
+
+        } catch (Exception e) {
+            System.err.println("Error generating report chart: " + e.getMessage());
+            lblChartMessage.setText("Error generating chart: " + e.getMessage());
+            chartContainer.getChildren().add(lblChartMessage);
+        }
+    }
+
+    /**
+     * Creates a PieChart for categorical data (e.g., Single/Multi Choice).
+     */
+    private PieChart createPieChart(String title, Map<String, Integer> counts, int total) {
+        ObservableList<PieChart.Data> pieChartData = FXCollections.observableArrayList();
+
+        counts.forEach((label, count) -> {
+            double percentage = (double) count / total * 100;
+            String displayLabel = String.format("%s (%.1f%%)", label, percentage);
+            pieChartData.add(new PieChart.Data(displayLabel, count));
+        });
+
+        PieChart chart = new PieChart(pieChartData);
+        chart.setTitle(title);
+        chart.setLegendVisible(true);
+        chart.setClockwise(false);
+        chart.setLabelsVisible(false);
+        return chart;
+    }
+
+    /**
+     * Creates a BarChart for ordered data (e.g., Rating).
+     */
+    private BarChart<String, Number> createBarChart(String title, Map<String, Integer> counts) {
+        final CategoryAxis xAxis = new CategoryAxis();
+        final NumberAxis yAxis = new NumberAxis();
+        yAxis.setLabel("Count of Responses");
+
+        BarChart<String, Number> barChart = new BarChart<>(xAxis, yAxis);
+        barChart.setTitle(title);
+        barChart.setLegendVisible(false);
+
+        XYChart.Series<String, Number> series = new XYChart.Series<>();
+
+        // Sort rating keys numerically before adding to the series for proper display order
+        List<String> sortedKeys = counts.keySet().stream()
+                .sorted(Comparator.comparing(s -> {
+                    try {
+                        return Integer.parseInt(s);
+                    } catch (NumberFormatException e) {
+                        return 0; // Fallback for non-numeric keys
+                    }
+                }))
+                .collect(Collectors.toList());
+
+        for (String key : sortedKeys) {
+            series.getData().add(new XYChart.Data<>(key, counts.get(key)));
+        }
+
+        barChart.getData().add(series);
+        return barChart;
+    }
+
+    // --- Visualization Logic END ---
+
 
     /**
      * Helper method to show an alert dialog.
@@ -138,12 +367,7 @@ public class ReportController {
         alert.showAndWait();
     }
 
-    // --- NEW: CSV Export Implementation ---
-
-    /**
-     * Handles the 'Export to CSV' button click.
-     * Prompts the user for a save location and exports the current table data.
-     */
+    // --- CSV Export Implementation (Existing Code) ---
     @FXML
     private void handleExportToCSV(ActionEvent event) {
         if (reportData.isEmpty()) {
@@ -151,18 +375,13 @@ public class ReportController {
             return;
         }
 
-        // Use the event source to get the primary Stage
         Stage stage = (Stage) ((Button) event.getSource()).getScene().getWindow();
-
         FileChooser fileChooser = new FileChooser();
         fileChooser.setTitle("Save Survey Summary Report");
-        // Set default filename
         fileChooser.setInitialFileName("Survey_Summary_Report.csv");
-        // Set extension filter
         fileChooser.getExtensionFilters().add(
                 new ExtensionFilter("CSV Files (*.csv)", "*.csv"));
 
-        // Show save file dialog
         File file = fileChooser.showSaveDialog(stage);
 
         if (file != null) {
@@ -177,20 +396,13 @@ public class ReportController {
         }
     }
 
-    /**
-     * Writes the ReportSurvey data into a CSV file.
-     * @param file The file handle to write to.
-     * @return true if successful, false otherwise.
-     */
     private boolean writeDataToCSV(File file) {
-        // Headers corresponding to the ReportSurvey properties
         String header = "Survey ID,Survey Name,Status,Number of Questions,Date Created,Total Responses\n";
 
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
             writer.write(header);
 
             for (ReportSurvey survey : reportData) {
-                // Manually construct the CSV line, ensuring double quotes around string fields for safety
                 String line = String.format("\"%s\",\"%s\",\"%s\",%d,%s,%d\n",
                         survey.getId(),
                         survey.getName(),
@@ -209,15 +421,13 @@ public class ReportController {
             return false;
         }
     }
-
-    // --- End NEW: CSV Export Implementation ---
+    // --- End CSV Export Implementation ---
 
 
     private Map<String, Integer> getSurveyResponseCounts(MongoDatabase db) {
         Map<String, Integer> counts = new HashMap<>();
         MongoCollection<Document> responseCollection = db.getCollection("responses");
 
-        // Aggregation pipeline: [ {$group: {_id: "$survey_id", count: {$sum: 1}}} ]
         List<Bson> pipeline = new ArrayList<>();
         pipeline.add(new Document("$group",
                 new Document("_id", "$survey_id")
@@ -226,7 +436,6 @@ public class ReportController {
 
         try {
             responseCollection.aggregate(pipeline).forEach(doc -> {
-                // Ensure ObjectId is handled correctly when coming from aggregation
                 Object idObject = doc.get("_id");
                 if (idObject instanceof ObjectId) {
                     ObjectId surveyId = (ObjectId) idObject;
@@ -250,30 +459,24 @@ public class ReportController {
 
         if (db == null) {
             System.err.println("Database connection failed. Cannot load report data.");
-            if (btnExportCSV != null) btnExportCSV.setDisable(true); // Ensure disabled on failure
+            if (btnExportCSV != null) btnExportCSV.setDisable(true);
             return;
         }
 
         System.out.println("INFO: Database connection established successfully for reports.");
 
-        // --- RBAC Logic for Reports ---
-        Bson filter; // Default: empty filter (shows all)
+        Bson filter;
 
-        // Only restrict access if the user is explicitly a Survey Creator
         if ("Survey Creator".equals(currentUserRole) && currentUsername != null) {
-            // Creators can only see surveys they created.
             filter = Filters.regex("creator", "^" + currentUsername + "$", "i");
-            System.out.println("✅ Report RBAC: Creator Filter Applied (Case-Insensitive Regex). User: " + currentUsername + ", Filter: " + filter.toString());
+            System.out.println("✅ Report RBAC: Creator Filter Applied. User: " + currentUsername);
         } else {
-            // If the role is NOT "Survey Creator" (i.e., Administrator, Data Entry), show all surveys.
             filter = new Document();
             System.out.println("✅ Report RBAC: Showing ALL surveys. Role: " + currentUserRole);
         }
-        // --- End RBAC Logic ---
 
         try {
             Map<String, Integer> responseCounts = getSurveyResponseCounts(db);
-
             MongoCollection<Document> surveyCollection = db.getCollection("surveys");
 
             int documentsFound = 0;
@@ -290,7 +493,7 @@ public class ReportController {
                 int totalResponses = responseCounts.getOrDefault(surveyId, 0);
 
                 ReportSurvey report = new ReportSurvey(
-                        surveyId, // Pass ID
+                        surveyId,
                         doc.getString("name"),
                         doc.getString("status"),
                         questionCount,
@@ -304,7 +507,6 @@ public class ReportController {
                 System.out.println("⚠️ WARNING: MongoDB query executed successfully but returned zero survey documents.");
             }
 
-            // Enable or disable the export button based on the loaded data
             if (btnExportCSV != null) {
                 btnExportCSV.setDisable(reportData.isEmpty());
             }
@@ -330,12 +532,12 @@ public class ReportController {
             FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/fsm/detailed-report-view.fxml"));
             Parent detailedReportView = loader.load();
 
-            // Pass the survey data to the new controller
             DetailedReportController controller = loader.getController();
-            // NOTE: We may need to update DetailedReportController later to include RBAC logic too
             controller.initData(selectedSurvey.getId(), selectedSurvey.getName());
 
             // Replace the current content (ReportController's view) with the detailed view
+            // NOTE: This assumes the ReportController's view is contained within an AnchorPane
+            // which is itself a child of the main VBox dashboard content container.
             AnchorPane parent = (AnchorPane) surveyReportTable.getParent().getParent();
             parent.getChildren().clear();
             parent.getChildren().add(detailedReportView);

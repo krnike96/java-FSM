@@ -10,10 +10,12 @@
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.AnchorPane?>
 <?import javafx.scene.control.Tooltip?>
+<?import javafx.scene.layout.StackPane?>
+<?import javafx.scene.control.ComboBox?>
 
 <AnchorPane prefHeight="700.0" prefWidth="900.0" style="-fx-background-color: #f7f7f7;" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.fsm.controllers.ReportController">
     <children>
-        <VBox alignment="TOP_CENTER" layoutX="10.0" layoutY="10.0" prefHeight="700.0" prefWidth="900.0" spacing="20.0" AnchorPane.bottomAnchor="0.0" AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0" AnchorPane.topAnchor="0.0">
+        <VBox alignment="TOP_CENTER" layoutX="10.0" layoutY="10.0" prefHeight="700.0" prefWidth="900.0" spacing="15.0" AnchorPane.bottomAnchor="0.0" AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0" AnchorPane.topAnchor="0.0">
             <children>
                 <Label styleClass="view-title" text="Survey Summary Report">
                     <font>
@@ -23,7 +25,8 @@
                         <Insets top="20.0" />
                     </VBox.margin>
                 </Label>
-                <TableView fx:id="surveyReportTable" prefHeight="550.0" prefWidth="860.0" style="-fx-background-color: white; -fx-border-color: #ccc; -fx-border-radius: 6; -fx-padding: 5;">
+                <!-- 1. Survey Summary Table (takes up 60% of vertical space) -->
+                <TableView fx:id="surveyReportTable" VBox.vgrow="ALWAYS" prefHeight="350.0" style="-fx-background-color: white; -fx-border-color: #ccc; -fx-border-radius: 6; -fx-padding: 5;">
                     <columns>
                         <TableColumn fx:id="colSurveyName" prefWidth="320.0" style="-fx-alignment: CENTER_LEFT;" text="Survey Name" />
                         <TableColumn fx:id="colStatus" prefWidth="120.0" style="-fx-alignment: CENTER;" text="Status" />
@@ -35,15 +38,15 @@
                         <TableView fx:constant="CONSTRAINED_RESIZE_POLICY" />
                     </columnResizePolicy>
                 </TableView>
-                <HBox alignment="CENTER_RIGHT" prefHeight="30.0" prefWidth="860.0" spacing="10.0">
+
+                <!-- 2. Action Buttons -->
+                <HBox alignment="CENTER_RIGHT" prefHeight="30.0" spacing="10.0">
                     <children>
-                        <!-- NEW: Export to CSV Button -->
                         <Button fx:id="btnExportCSV" mnemonicParsing="false" onAction="#handleExportToCSV" style="-fx-background-color: #28a745; -fx-text-fill: white; -fx-padding: 10 20;" text="Export to CSV">
                             <tooltip>
                                 <Tooltip text="Export the current summary table data to a CSV file." />
                             </tooltip>
                         </Button>
-
                         <Button fx:id="btnViewDetails" mnemonicParsing="false" onAction="#handleViewDetails" style="-fx-background-color: #007bff; -fx-text-fill: white; -fx-padding: 10 20;" text="View Detailed Responses">
                             <tooltip>
                                 <Tooltip text="View all individual responses for the selected survey." />
@@ -51,6 +54,24 @@
                         </Button>
                     </children>
                 </HBox>
+
+                <!-- 3. Visualization Panel -->
+                <VBox fx:id="visualizationPanel" alignment="TOP_CENTER" spacing="10.0" visible="false" managed="false" style="-fx-border-color: #ccc; -fx-border-radius: 6; -fx-padding: 15; -fx-background-color: white;">
+                    <children>
+                        <Label style="-fx-font-size: 16px; -fx-font-weight: bold;" text="Response Visualization" />
+                        <HBox alignment="CENTER_LEFT" spacing="10.0">
+                            <Label text="Select Question to Visualize:" />
+                            <ComboBox fx:id="cbxQuestions" prefWidth="400.0" promptText="Select a Question" onAction="#handleQuestionSelected" />
+                        </HBox>
+                        <!-- Chart Container (Charts will be dynamically placed here) -->
+                        <StackPane fx:id="chartContainer" prefHeight="300.0" prefWidth="860.0" style="-fx-border-color: #eee;">
+                            <children>
+                                <Label fx:id="lblChartMessage" text="Select a survey and a question above to view its visualization." style="-fx-text-fill: #999;" />
+                            </children>
+                        </StackPane>
+                    </children>
+                </VBox>
+
             </children>
             <padding>
                 <Insets left="20.0" right="20.0" />
