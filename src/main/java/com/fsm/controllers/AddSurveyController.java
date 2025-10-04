@@ -25,7 +25,7 @@ public class AddSurveyController {
     private SurveyController parentController;
     private String originalSurveyName;
 
-    // CRITICAL FIX: Field to store the username of the person creating/editing the survey
+    // Field to store the username of the person creating/editing the survey
     private String creatorUsername;
 
     @FXML
@@ -39,8 +39,7 @@ public class AddSurveyController {
     }
 
     /**
-     * FIX: Setter method to receive the current logged-in username from SurveyController.
-     * This resolves the "cannot resolve method" error.
+     * Setter method to receive the current logged-in username from SurveyController.
      */
     public void setCreatorUsername(String username) {
         this.creatorUsername = username;
@@ -98,7 +97,7 @@ public class AddSurveyController {
                     .append("name", name)
                     .append("status", status)
                     .append("numQuestions", numQuestions)
-                    // CRITICAL FIX: Append the creator's username when creating a new survey
+                    // Append the creator's username when creating a new survey
                     .append("creator", creatorUsername)
                     .append("dateCreated", new java.util.Date());
 
@@ -114,8 +113,12 @@ public class AddSurveyController {
         closeWindow();
     }
 
+    /**
+     * Executes the MongoDB update operation using the Singleton connection.
+     */
     private boolean updateSurveyInMongo(String newName, String newStatus) {
-        MongoDatabase db = MongoManager.connect();
+        // PERFORMANCE FIX: Use the Singleton instance to get the shared database connection
+        MongoDatabase db = MongoManager.getInstance().getDatabase();
         if (db == null) {
             System.err.println("FATAL: Cannot connect to DB to update survey.");
             return false;
@@ -143,8 +146,12 @@ public class AddSurveyController {
         }
     }
 
+    /**
+     * Executes the MongoDB insert operation using the Singleton connection.
+     */
     private boolean insertSurveyIntoMongo(Document doc) {
-        MongoDatabase db = MongoManager.connect();
+        // PERFORMANCE FIX: Use the Singleton instance to get the shared database connection
+        MongoDatabase db = MongoManager.getInstance().getDatabase();
         if (db == null) {
             System.err.println("FATAL: Cannot connect to DB to save survey.");
             return false;

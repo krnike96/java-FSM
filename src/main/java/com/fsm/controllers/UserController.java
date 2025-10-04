@@ -10,7 +10,7 @@ import javafx.fxml.FXML;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.Button;
-import javafx.scene.layout.VBox; // <-- ADDED MISSING IMPORT
+import javafx.scene.layout.VBox;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.beans.property.SimpleStringProperty;
@@ -98,9 +98,13 @@ public class UserController {
         loadUserData();
     }
 
+    /**
+     * FIX: Loads user data using the efficient Singleton database connection.
+     */
     private void loadUserData() {
         masterData.clear();
-        MongoDatabase db = MongoManager.connect();
+        // PERFORMANCE FIX: Use the Singleton instance to get the shared database connection
+        MongoDatabase db = MongoManager.getInstance().getDatabase();
         userTable.setItems(masterData);
 
         if (db == null) {
@@ -131,7 +135,7 @@ public class UserController {
      * Handles the Add User button action.
      */
     @FXML
-    private void handleAddUser() { // <--- ENSURING CORRECT SIGNATURE
+    private void handleAddUser() {
         if (!"Administrator".equals(currentUserRole)) {
             showAlert(AlertType.ERROR, "Access Denied", "Only Administrators can add users.");
             return;
@@ -162,7 +166,7 @@ public class UserController {
      * Handles the Edit User button action.
      */
     @FXML
-    private void handleEditUser() { // <--- ENSURING CORRECT SIGNATURE
+    private void handleEditUser() {
         if (!"Administrator".equals(currentUserRole)) {
             showAlert(AlertType.ERROR, "Access Denied", "Only Administrators can edit users.");
             return;
@@ -201,7 +205,7 @@ public class UserController {
      * Handles the Delete User button action.
      */
     @FXML
-    private void handleDeleteUser() { // <--- ENSURING CORRECT SIGNATURE
+    private void handleDeleteUser() {
         if (!"Administrator".equals(currentUserRole)) {
             showAlert(AlertType.ERROR, "Access Denied", "Only Administrators can delete users.");
             return;
@@ -246,10 +250,11 @@ public class UserController {
     }
 
     /**
-     * Executes the MongoDB delete operation.
+     * Executes the MongoDB delete operation using the Singleton connection.
      */
     private boolean deleteUserFromMongo(String username) {
-        MongoDatabase db = MongoManager.connect();
+        // PERFORMANCE FIX: Use the Singleton instance to get the shared database connection
+        MongoDatabase db = MongoManager.getInstance().getDatabase();
         if (db == null) {
             return false;
         }

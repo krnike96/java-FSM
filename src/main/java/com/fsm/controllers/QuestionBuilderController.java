@@ -147,7 +147,8 @@ public class QuestionBuilderController {
     private void loadExistingQuestions(String surveyName) {
         currentQuestions.clear();
 
-        MongoDatabase db = MongoManager.connect();
+        // FIX: Use MongoManager.getInstance().getDatabase() instead of MongoManager.connect()
+        MongoDatabase db = MongoManager.getInstance().getDatabase();
         if (db == null) return;
 
         try {
@@ -263,7 +264,8 @@ public class QuestionBuilderController {
      * @return true if update was successful.
      */
     private boolean saveQuestionsToMongo(List<Document> questionDocs, int questionCount) {
-        MongoDatabase db = MongoManager.connect();
+        // FIX: Use MongoManager.getInstance().getDatabase() instead of MongoManager.connect()
+        MongoDatabase db = MongoManager.getInstance().getDatabase();
         if (db == null) return false;
 
         try {

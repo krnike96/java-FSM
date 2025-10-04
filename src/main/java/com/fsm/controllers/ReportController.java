@@ -167,7 +167,7 @@ public class ReportController {
         });
     }
 
-    // --- Visualization Logic START (No changes here) ---
+    // --- Visualization Logic START (Fix applied here) ---
 
     /**
      * Loads the questions for the selected survey to populate the ComboBox.
@@ -178,7 +178,8 @@ public class ReportController {
         chartContainer.getChildren().clear();
         lblChartMessage.setText("Select a question from the dropdown to see the chart.");
 
-        MongoDatabase db = MongoManager.connect();
+        // FIX: Use MongoManager.getInstance().getDatabase()
+        MongoDatabase db = MongoManager.getInstance().getDatabase();
         if (db == null) return;
 
         try {
@@ -230,7 +231,8 @@ public class ReportController {
      * Fetches responses for the selected question and generates a PieChart or BarChart.
      */
     private void generateReportChart(String surveyId, QuestionMetadata question) {
-        MongoDatabase db = MongoManager.connect();
+        // FIX: Use MongoManager.getInstance().getDatabase()
+        MongoDatabase db = MongoManager.getInstance().getDatabase();
         if (db == null) return;
 
         // 1. Fetch responses for the selected survey
@@ -455,7 +457,8 @@ public class ReportController {
 
     private void loadReportData() {
         reportData.clear();
-        MongoDatabase db = MongoManager.connect();
+        // FIX: Use MongoManager.getInstance().getDatabase()
+        MongoDatabase db = MongoManager.getInstance().getDatabase();
 
         if (db == null) {
             System.err.println("Database connection failed. Cannot load report data.");

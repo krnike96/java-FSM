@@ -70,7 +70,8 @@ public class SurveyTakerController {
     }
 
     private void loadActiveSurveys() {
-        MongoDatabase db = MongoManager.connect();
+        // FIX: Use MongoManager.getInstance().getDatabase()
+        MongoDatabase db = MongoManager.getInstance().getDatabase();
         if (db == null) return;
 
         ObservableList<SurveyItem> surveys = FXCollections.observableArrayList();
@@ -78,7 +79,7 @@ public class SurveyTakerController {
         try {
             MongoCollection<Document> surveyCollection = db.getCollection("surveys");
 
-            // FIX 2: Filter the surveys collection to only include documents where status is "Active"
+            // Filter the surveys collection to only include documents where status is "Active"
             Document filter = new Document("status", "Active");
 
             // Iterate over the filtered results
@@ -97,7 +98,8 @@ public class SurveyTakerController {
     private void loadSurveyQuestions(String surveyId) {
         questionsContainer.getChildren().clear();
         responseControls.clear();
-        MongoDatabase db = MongoManager.connect();
+        // FIX: Use MongoManager.getInstance().getDatabase()
+        MongoDatabase db = MongoManager.getInstance().getDatabase();
         if (db == null) return;
 
         try {
@@ -260,7 +262,8 @@ public class SurveyTakerController {
     }
 
     private void saveResponse(String surveyId, List<Document> responses) {
-        MongoDatabase db = MongoManager.connect();
+        // FIX: Use MongoManager.getInstance().getDatabase()
+        MongoDatabase db = MongoManager.getInstance().getDatabase();
 
         if (db == null) {
             showAlert("FATAL ERROR", "Database connection failed. Check MongoManager.", AlertType.ERROR);

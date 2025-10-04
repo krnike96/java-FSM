@@ -62,7 +62,7 @@ public class AddUserController {
         // If a user is passed, enter EDIT mode
         if (userToEdit != null) {
             this.originalUsername = userToEdit.getUsername();
-            this.originalRole = userToEdit.getRole(); // <-- FIX: Store original role for demotion check
+            this.originalRole = userToEdit.getRole();
 
             txtUsername.setText(userToEdit.getUsername());
             cmbRole.setValue(userToEdit.getRole());
@@ -87,7 +87,7 @@ public class AddUserController {
         if (isEditMode) {
             // ================== EDIT MODE ==================
 
-            // --- 1. Security Check: Self-Demotion Prevention (Bug Fix) ---
+            // --- 1. Security Check: Self-Demotion Prevention ---
             if (originalUsername.equals(currentLoggedInUsername) &&
                     "Administrator".equals(originalRole) &&
                     !"Administrator".equals(newRole)) {
@@ -107,7 +107,6 @@ public class AddUserController {
             }
 
             // --- 3. Security Check: Duplicate Username on Rename ---
-            // The isUsernameTaken check is now case-insensitive.
             if (!originalUsername.equalsIgnoreCase(newUsername) && isUsernameTaken(newUsername)) {
                 showAlert(AlertType.ERROR, "Update Failed",
                         "Update Failed: The new username '" + newUsername + "' is already in use by another user.");
@@ -128,8 +127,7 @@ public class AddUserController {
                 return;
             }
 
-            // --- 0. Security Check: Duplicate Username Pre-Check (FIX) ---
-            // The isUsernameTaken check is now case-insensitive.
+            // --- 0. Security Check: Duplicate Username Pre-Check ---
             if (isUsernameTaken(newUsername)) {
                 showAlert(AlertType.ERROR, "User Creation Failed",
                         "The username '" + newUsername + "' is already taken. Please choose a different one.");
@@ -153,7 +151,7 @@ public class AddUserController {
                     .append("password", hashedPassword)
                     .append("role", newRole);
 
-            if (!insertUserIntoMongo(userDoc, newUsername)) { // <-- Passing newUsername for alert
+            if (!insertUserIntoMongo(userDoc, newUsername)) {
                 return; // Error handled within insert method
             }
             System.out.println("User created successfully: " + newUsername);
@@ -166,8 +164,12 @@ public class AddUserController {
         closeWindow();
     }
 
+    /**
+     * Executes the MongoDB update operation using the Singleton connection.
+     */
     private boolean updateUserInMongo(String newUsername, String rawPassword, String newRole) {
-        MongoDatabase db = MongoManager.connect();
+        // PERFORMANCE FIX: Use the Singleton instance to get the shared database connection
+        MongoDatabase db = MongoManager.getInstance().getDatabase();
         if (db == null) {
             showAlert(AlertType.ERROR, "Database Error", "FATAL: Cannot connect to DB to update user.");
             return false;
@@ -201,9 +203,7 @@ public class AddUserController {
 
             return true;
         } catch (MongoWriteException e) {
-            // NOTE: We still catch 11000 here just in case the check fails, or we have an index!
             if (e.getError().getCode() == 11000) {
-                // Catches if the user tries to rename their username to an existing one
                 showAlert(AlertType.ERROR, "Update Failed",
                         "Update Failed: The new username '" + newUsername + "' is already in use by another user.");
             } else {
@@ -216,8 +216,12 @@ public class AddUserController {
         }
     }
 
+    /**
+     * Executes the MongoDB insert operation using the Singleton connection.
+     */
     private boolean insertUserIntoMongo(Document doc, String newUsername) {
-        MongoDatabase db = MongoManager.connect();
+        // PERFORMANCE FIX: Use the Singleton instance to get the shared database connection
+        MongoDatabase db = MongoManager.getInstance().getDatabase();
         if (db == null) {
             showAlert(AlertType.ERROR, "Database Error", "FATAL: Cannot connect to DB to save user.");
             return false;
@@ -227,7 +231,6 @@ public class AddUserController {
             collection.insertOne(doc);
             return true;
         } catch (MongoWriteException e) {
-            // Handles unique index violation (duplicate username) - Kept as a fallback
             if (e.getError().getCode() == 11000) {
                 showAlert(AlertType.ERROR, "User Creation Failed",
                         "The username '" + newUsername + "' is already taken. Please choose a different one.");
@@ -244,10 +247,11 @@ public class AddUserController {
     }
 
     /**
-     * Helper to count existing Administrators.
+     * Helper to count existing Administrators using the Singleton connection.
      */
     private int countAdministrators() {
-        MongoDatabase db = MongoManager.connect();
+        // PERFORMANCE FIX: Use the Singleton instance to get the shared database connection
+        MongoDatabase db = MongoManager.getInstance().getDatabase();
         if (db == null) return MAX_ADMINS; // Assume max reached if connection fails
 
         try {
@@ -261,12 +265,11 @@ public class AddUserController {
     }
 
     /**
-     * Checks if a given username already exists in the database.
-     * This is a pre-check to prevent duplicate entry issues.
-     * FIX: Uses a case-insensitive regex match to catch duplicates like "admin" and "Admin".
+     * Checks if a given username already exists in the database using the Singleton connection.
      */
     private boolean isUsernameTaken(String username) {
-        MongoDatabase db = MongoManager.connect();
+        // PERFORMANCE FIX: Use the Singleton instance to get the shared database connection
+        MongoDatabase db = MongoManager.getInstance().getDatabase();
         // If connection fails, assume it's taken to prevent accidental creation
         if (db == null) {
             System.err.println("Database connection failed during username check.");

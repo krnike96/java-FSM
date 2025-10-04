@@ -11,28 +11,88 @@ import org.mindrot.jbcrypt.BCrypt;
 
 // New imports for combining filters
 import org.bson.conversions.Bson;
-import com.mongodb.client.model.Filters;
-
+import io.github.cdimascio.dotenv.Dotenv; // ADDED: Import for reading .env file
 
 public class MongoManager {
 
-    private static final String CONNECTION_STRING = "mongodb://localhost:27017/";
-    private static final String DATABASE_NAME = "FieldSurveyDB";
+    // 1. Singleton Instance Holder
+    private static MongoManager instance;
+
+    // 2. The Singleton MongoClient
+    private final MongoClient mongoClient;
+    private final MongoDatabase database;
+
+    // Will hold the name of the database loaded from .env
+    private static String databaseName;
 
     /**
-     * Establishes a connection to MongoDB and returns the database object.
-     * @return The MongoDatabase object, or null if connection fails.
+     * Private constructor to prevent instantiation from outside the class.
+     * Establishes the single MongoClient connection by reading configurations from the .env file.
      */
-    public static MongoDatabase connect() {
+    private MongoManager() {
+        MongoClient client = null;
+        MongoDatabase db = null;
+        String connectionString = null;
+
         try {
-            // Note: MongoClients.create() establishes the connection
-            MongoClient mongoClient = MongoClients.create(CONNECTION_STRING);
-            return mongoClient.getDatabase(DATABASE_NAME);
+            // Load environment variables from .env file (requires dotenv-java dependency)
+            Dotenv dotenv = Dotenv.load();
+
+            connectionString = dotenv.get("MONGO_CONNECTION_STRING");
+            String dbName = dotenv.get("DATABASE_NAME");
+
+            if (connectionString == null || connectionString.isEmpty()) {
+                throw new IllegalStateException("FATAL ERROR: MONGO_URI is not set in the .env file.");
+            }
+            if (dbName == null || dbName.isEmpty()) {
+                // Use a sensible default if the DB name isn't specified, but warn
+                dbName = "FieldSurveyDB";
+                System.out.println("⚠️ WARNING: DATABASE_NAME not set in .env. Defaulting to: " + dbName);
+            }
+
+            databaseName = dbName; // Set static field for logging/reference
+
+            // Establish the single connection pool instance
+            client = MongoClients.create(connectionString);
+            db = client.getDatabase(databaseName);
+            System.out.println("✅ MongoManager: Singleton MongoClient initialized successfully for DB: " + databaseName);
+
+        } catch (IllegalStateException e) {
+            System.err.println("❌ " + e.getMessage());
+            client = null;
+            db = null;
         } catch (Exception e) {
-            System.err.println("❌ ERROR connecting to MongoDB: " + e.getMessage());
-            return null;
+            System.err.println("❌ ERROR: Failed to initialize Singleton MongoDB client with URI: " + (connectionString != null ? connectionString : "N/A") + " - " + e.getMessage());
+            e.printStackTrace();
+            client = null;
+            db = null;
         }
+        this.mongoClient = client;
+        this.database = db;
     }
+
+    /**
+     * Public static method to get the single instance of MongoManager.
+     * @return The single instance of MongoManager.
+     */
+    public static synchronized MongoManager getInstance() {
+        if (instance == null) {
+            instance = new MongoManager();
+        }
+        return instance;
+    }
+
+    /**
+     * NEW: Returns the MongoDatabase object from the single, shared connection.
+     * Controllers should now call MongoManager.getInstance().getDatabase().
+     * @return The MongoDatabase object, or null if connection failed during initialization.
+     */
+    public MongoDatabase getDatabase() {
+        return this.database;
+    }
+
+
+    // The following helper methods must now use getDatabase() instead of connect().
 
     /**
      * Hashes a plain text password using BCrypt (Salted and slow for security).
@@ -69,7 +129,8 @@ public class MongoManager {
      * @return The user Document, or null if not found or connection failed.
      */
     public static Document findUserByUsername(String username) {
-        MongoDatabase db = connect();
+        // Updated to use the Singleton pattern
+        MongoDatabase db = MongoManager.getInstance().getDatabase();
         if (db == null) return null;
 
         try {
@@ -88,7 +149,8 @@ public class MongoManager {
      * @return true if the update was successful, false otherwise.
      */
     public static boolean updateUserUsername(String oldUsername, String newUsername) {
-        MongoDatabase db = connect();
+        // Updated to use the Singleton pattern
+        MongoDatabase db = MongoManager.getInstance().getDatabase();
         if (db == null) return false;
 
         try {
@@ -121,7 +183,8 @@ public class MongoManager {
      * @return true if the update was successful, false otherwise.
      */
     public static boolean updateUserPassword(String username, String newHashedPassword) {
-        MongoDatabase db = connect();
+        // Updated to use the Singleton pattern
+        MongoDatabase db = MongoManager.getInstance().getDatabase();
         if (db == null) return false;
 
         try {
@@ -157,7 +220,8 @@ public class MongoManager {
      * @return A Document representing the user if login is successful, or null otherwise.
      */
     public static Document authenticateUser(String username, String password, String role) {
-        MongoDatabase db = connect();
+        // Updated to use the Singleton pattern
+        MongoDatabase db = MongoManager.getInstance().getDatabase();
 
         if (db == null) {
             return null;

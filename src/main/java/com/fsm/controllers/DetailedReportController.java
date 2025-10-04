@@ -82,7 +82,8 @@ public class DetailedReportController {
      * Loads the survey questions and then fetches the responses, dynamically building the table.
      */
     private void loadDetailedResponses() {
-        MongoDatabase db = MongoManager.connect();
+        // FIX: Use MongoManager.getInstance().getDatabase()
+        MongoDatabase db = MongoManager.getInstance().getDatabase();
         if (db == null) return;
 
         responseTable.getColumns().clear();

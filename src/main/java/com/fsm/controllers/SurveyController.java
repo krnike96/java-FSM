@@ -4,7 +4,7 @@ import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.MongoException;
 import org.bson.Document;
-import com.fsm.database.MongoManager;
+import com.fsm.database.MongoManager; // Keep this import
 
 import javafx.fxml.FXML;
 import javafx.scene.control.TableView;
@@ -28,7 +28,7 @@ import javafx.scene.control.Alert.AlertType;
 import javafx.scene.control.ButtonType;
 import com.mongodb.client.model.Filters;
 import java.util.Optional;
-import org.bson.conversions.Bson; // Import for conditional filtering
+import org.bson.conversions.Bson;
 
 public class SurveyController {
 
@@ -72,7 +72,7 @@ public class SurveyController {
     @FXML private Button btnManageQuestions;
 
     private String currentUserRole;         // Stored for permission checks
-    private String currentLoggedInUsername; // **New Field** - Stored for filtering surveys
+    private String currentLoggedInUsername; // Stored for filtering surveys
 
     private final ObservableList<Survey> masterData = FXCollections.observableArrayList();
 
@@ -132,7 +132,8 @@ public class SurveyController {
      */
     private void loadSurveyData() {
         masterData.clear();
-        MongoDatabase db = MongoManager.connect();
+        // PERFORMANCE FIX: Use the Singleton instance to get the shared database connection
+        MongoDatabase db = MongoManager.getInstance().getDatabase();
         surveyTable.setItems(masterData); // Set the empty list immediately
 
         if (db == null) {
@@ -300,7 +301,8 @@ public class SurveyController {
      * Executes the MongoDB delete operation.
      */
     private boolean deleteSurveyFromMongo(String surveyName) {
-        MongoDatabase db = MongoManager.connect();
+        // PERFORMANCE FIX: Use the Singleton instance to get the shared database connection
+        MongoDatabase db = MongoManager.getInstance().getDatabase();
         if (db == null) {
             return false; // Connection failed
         }

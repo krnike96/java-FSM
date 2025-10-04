@@ -5,7 +5,7 @@ import javafx.fxml.FXML;
 import javafx.scene.control.Label;
 import javafx.scene.control.PasswordField;
 import javafx.scene.control.TextField;
-import javafx.scene.control.ComboBox; // Import ComboBox
+import javafx.scene.control.ComboBox;
 import javafx.scene.Node;
 import javafx.stage.Stage;
 import javafx.event.ActionEvent;
@@ -14,14 +14,14 @@ import javafx.scene.Parent;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Scene;
 import java.io.IOException;
-import java.util.Arrays; // Import Arrays for ComboBox list
+import java.util.Arrays;
 
 public class LoginController {
 
     @FXML private TextField usernameField;
     @FXML private PasswordField passwordField;
     @FXML private Label statusLabel;
-    @FXML private ComboBox<String> roleComboBox; // NEW: Inject the role selection ComboBox
+    @FXML private ComboBox<String> roleComboBox;
 
     @FXML
     public void initialize() {
@@ -31,18 +31,19 @@ public class LoginController {
                 "Survey Creator",
                 "Data Entry"
         );
-        // Pre-select Administrator as a common default, or leave blank (using promptText)
-        // Leaving it blank forces the user to choose, which is better UX for this requirement.
     }
 
     /**
      * Handles the login button click event.
+     * Since MongoManager.authenticateUser() is a static helper,
+     * it now internally calls MongoManager.getInstance().getDatabase(),
+     * ensuring the database connection is initialized and used efficiently.
      */
     @FXML
     private void handleLoginButton(ActionEvent event) {
         String username = usernameField.getText().trim();
         String password = passwordField.getText();
-        String selectedRole = roleComboBox.getValue(); // NEW: Get the selected role
+        String selectedRole = roleComboBox.getValue();
 
         if (selectedRole == null) {
             statusLabel.setText("Please select your role.");
@@ -54,7 +55,8 @@ public class LoginController {
             return;
         }
 
-        // IMPORTANT: Now calling the updated authentication method with the selected role
+        // Call the static helper method. This is where the Singleton connection is
+        // first accessed (or initialized if it's the very first call).
         Document authenticatedUser = MongoManager.authenticateUser(username, password, selectedRole);
 
         if (authenticatedUser != null) {
@@ -94,9 +96,7 @@ public class LoginController {
             }
 
         } else {
-            // FAILURE: Login failed. The error will now occur if:
-            // 1. Username/Password is wrong.
-            // 2. The provided role does not match the role stored in the database for that user.
+            // FAILURE: Login failed.
             statusLabel.setText("Invalid credentials or role mismatch. Please try again.");
             passwordField.clear();
         }
