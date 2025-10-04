@@ -104,13 +104,13 @@ public class ReportController {
     @FXML private Button btnViewDetails;
     @FXML private Button btnExportCSV;
 
-    // --- Visualization FXML Bindings (NEW) ---
+    // --- Visualization FXML Bindings ---
     @FXML private VBox visualizationPanel;
     @FXML private ComboBox<QuestionMetadata> cbxQuestions;
     @FXML private StackPane chartContainer;
     @FXML private Label lblChartMessage;
 
-    private List<QuestionMetadata> currentSurveyQuestions = new ArrayList<>(); // Questions for the selected survey
+    private List<QuestionMetadata> currentSurveyQuestions = new ArrayList<>();
     // -----------------------------------------
 
     private String currentUserRole;
@@ -167,7 +167,7 @@ public class ReportController {
         });
     }
 
-    // --- Visualization Logic START ---
+    // --- Visualization Logic START (No changes here) ---
 
     /**
      * Loads the questions for the selected survey to populate the ComboBox.
@@ -367,7 +367,7 @@ public class ReportController {
         alert.showAndWait();
     }
 
-    // --- CSV Export Implementation (Existing Code) ---
+    // --- CSV Export Implementation (No changes here) ---
     @FXML
     private void handleExportToCSV(ActionEvent event) {
         if (reportData.isEmpty()) {
@@ -533,11 +533,14 @@ public class ReportController {
             Parent detailedReportView = loader.load();
 
             DetailedReportController controller = loader.getController();
+
+            // FIX: Pass the user context down to the Detailed Report Controller
+            // so it can use it to return correctly to the ReportController.
+            controller.setUserContext(this.currentUserRole, this.currentUsername);
+
             controller.initData(selectedSurvey.getId(), selectedSurvey.getName());
 
             // Replace the current content (ReportController's view) with the detailed view
-            // NOTE: This assumes the ReportController's view is contained within an AnchorPane
-            // which is itself a child of the main VBox dashboard content container.
             AnchorPane parent = (AnchorPane) surveyReportTable.getParent().getParent();
             parent.getChildren().clear();
             parent.getChildren().add(detailedReportView);

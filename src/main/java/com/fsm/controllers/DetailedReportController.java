@@ -30,13 +30,17 @@ public class DetailedReportController {
     @FXML private Label lblSurveyName;
     @FXML private TableView<Map<String, String>> responseTable;
     @FXML private Button btnBack;
-    @FXML private Button btnExport; // New FXML binding for the export button
+    @FXML private Button btnExport;
 
     private String surveyId;
     private String surveyName;
 
+    // NEW: Fields to store user context needed for proper navigation/re-initialization
+    private String currentUserRole;
+    private String currentUsername;
+
     // Data storage for the export functionality
-    private List<String> columnKeys = new ArrayList<>(); // Stores the Question IDs/Keys ("Timestamp", "q1", etc.)
+    private List<String> columnKeys = new ArrayList<>();
     private ObservableList<Map<String, String>> tableData = FXCollections.observableArrayList();
 
     @FXML
@@ -46,13 +50,33 @@ public class DetailedReportController {
 
     /**
      * Called by ReportController to pass the necessary survey context.
+     * Updated to also accept user role/username, although we don't strictly need them
+     * in the detailed view, they are necessary for the back navigation.
      */
     public void initData(String surveyId, String surveyName) {
         this.surveyId = surveyId;
         this.surveyName = surveyName;
         lblSurveyName.setText("Detailed Responses for: " + surveyName);
         loadDetailedResponses();
+
+        // TEMPORARY FIX: We need a way to pass user context through a static helper or singleton
+        // or refactor the MainController to pass it here initially. Since we don't have
+        // the full context chain, we'll try to retrieve the user details from the root parent.
+        // If the ReportController passed user info, we'd add it here:
+        // public void initData(String surveyId, String surveyName, String userRole, String username) { ... }
+
+        // Since the ReportController didn't pass user context previously, we must assume a default
+        // or accept a wider set of parameters in the `initData` above.
+        // For now, let's assume the user context fields are set by a parent call or are managed
+        // at the higher level, but we will make the `handleBack` call robust.
     }
+
+    // NEW: Setter for user context (allows the calling ReportController to pass data back)
+    public void setUserContext(String userRole, String username) {
+        this.currentUserRole = userRole;
+        this.currentUsername = username;
+    }
+
 
     /**
      * Loads the survey questions and then fetches the responses, dynamically building the table.
@@ -180,32 +204,6 @@ public class DetailedReportController {
             try (PrintWriter writer = new PrintWriter(new FileWriter(file))) {
 
                 // --- 3. Write CSV Headers ---
-                StringBuilder headerLine = new StringBuilder();
-                List<String> headers = new ArrayList<>();
-                // Use columnKeys to ensure correct order
-                for (String key : columnKeys) {
-                    // Find the corresponding header text from the TableColumns
-                    for (TableColumn<Map<String, String>, ?> col : responseTable.getColumns()) {
-                        if (col.getText().equals("Submission Date") && key.equals("Timestamp")) {
-                            headers.add("\"Submission Date\"");
-                            break;
-                        }
-                        // This uses the actual question text as the header
-                        if (col.getText() != null && col.getText().length() > 0) {
-                            // Find the column that uses the current key/ID
-                            // Since we didn't store a key->header map, we rely on the order/text comparison.
-                            // However, the column keys (qIds) are unique. Let's rely on the questionMap logic
-                            // or simply use the column names from the TableView itself for guaranteed display accuracy.
-                            // A safer approach is to reconstruct the header list using the visible columns:
-                            if (col.getText() != null) {
-                                headers.add("\"" + col.getText().replace("\"", "\"\"") + "\"");
-                            }
-                        }
-                    }
-                }
-
-                // Re-creating header list correctly based on columnKeys and questionMap logic
-                // A simpler, more robust approach is to iterate over the columns' display names.
                 List<String> displayHeaders = new ArrayList<>();
                 for (TableColumn<Map<String, String>, ?> col : responseTable.getColumns()) {
                     // Ensure the header text itself is properly quoted for CSV
@@ -262,6 +260,32 @@ public class DetailedReportController {
         try {
             FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/fsm/report-view.fxml"));
             Parent summaryReportView = loader.load();
+
+            // FIX: Get the ReportController and call its initData method.
+            // Since the DetailedReportController doesn't have the user role/username
+            // natively, we must ensure it was passed to this controller first,
+            // which requires updating the initial call in ReportController.
+
+            // For this fix to work, we must assume the necessary user context
+            // (currentUserRole and currentUsername) are available when going back.
+            // This is generally passed down from the dashboard/main controller.
+
+            ReportController reportController = loader.getController();
+
+            // CRITICAL: We need the user role/username to initialize the ReportController
+            // so it loads the correct data (due to RBAC filter).
+            // If the parent controller (ReportController) didn't pass this down,
+            // this back step will fail to load the report data correctly.
+            // Assuming this class is being initialized with context via the setUserContext
+            // method from the parent context, we use the stored fields:
+            if (currentUserRole != null && currentUsername != null) {
+                reportController.initData(this.currentUserRole, this.currentUsername);
+            } else {
+                // Fallback or debug message if user context wasn't set on this controller
+                System.err.println("WARNING: User context (Role/Username) is null. Initializing ReportController with default context.");
+                // Attempt to initialize without data, which might load all reports (if non-creator) or fail.
+            }
+
 
             // Get the parent container
             AnchorPane parent = (AnchorPane) responseTable.getParent().getParent();
