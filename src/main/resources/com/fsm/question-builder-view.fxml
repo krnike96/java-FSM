@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <?import javafx.scene.control.*?>
+
 <?import javafx.scene.layout.*?>
+
 <?import javafx.geometry.Insets?>
 
 <AnchorPane maxHeight="1.7976931348623157E308" maxWidth="1.7976931348623157E308" prefHeight="600.0" prefWidth="800.0" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.fsm.controllers.QuestionBuilderController">
@@ -25,14 +27,21 @@
                             <RowConstraints minHeight="10.0" prefHeight="30.0" vgrow="SOMETIMES" />
                             <RowConstraints minHeight="10.0" prefHeight="30.0" vgrow="SOMETIMES" />
                             <RowConstraints minHeight="10.0" prefHeight="30.0" vgrow="SOMETIMES" />
+                            <RowConstraints minHeight="10.0" prefHeight="30.0" vgrow="SOMETIMES" />
                         </rowConstraints>
                         <children>
                             <Label text="Question Text:" />
                             <TextArea fx:id="txtQuestionText" prefHeight="70.0" prefWidth="200.0" GridPane.columnIndex="1" GridPane.rowIndex="0" />
+
                             <Label text="Type:" GridPane.rowIndex="1" />
                             <ComboBox fx:id="cmbQuestionType" prefWidth="200.0" GridPane.columnIndex="1" GridPane.rowIndex="1" />
 
-                            <VBox fx:id="vboxDynamicOptions" alignment="TOP_CENTER" spacing="5.0" GridPane.columnIndex="1" GridPane.rowIndex="2" />
+                            <!-- NEW: Mandatory Checkbox (Row 2) -->
+                            <Label text="Mandatory:" GridPane.rowIndex="2" />
+                            <CheckBox fx:id="chkMandatory" GridPane.columnIndex="1" GridPane.rowIndex="2" />
+
+                            <!-- Dynamic Options moved to Row 3 -->
+                            <VBox fx:id="vboxDynamicOptions" alignment="TOP_LEFT" spacing="5.0" GridPane.columnIndex="1" GridPane.rowIndex="3" />
 
                             <Button fx:id="btnAddQuestion" text="Add Question" GridPane.columnIndex="2" GridPane.rowIndex="0" VBox.vgrow="NEVER" />
                         </children>
@@ -55,4 +64,5 @@
             </HBox>
         </VBox>
     </children>
+
 </AnchorPane>

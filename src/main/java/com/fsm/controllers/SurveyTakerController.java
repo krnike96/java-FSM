@@ -3,7 +3,7 @@ package com.fsm.controllers;
 import com.fsm.database.MongoManager;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
-import com.mongodb.client.model.Filters; // Import Filters
+import com.mongodb.client.model.Filters;
 import org.bson.Document;
 import javafx.fxml.FXML;
 import javafx.scene.control.*;
@@ -29,6 +29,9 @@ public class SurveyTakerController {
 
     // Key: Question ID, Value: The JavaFX control (TextField, ToggleGroup, CheckBox list)
     private final Map<String, Object> responseControls = new HashMap<>();
+
+    // Store the question list from the currently loaded survey to check for mandatory status
+    private List<Document> currentQuestionsMetadata = new ArrayList<>();
 
     private String currentUserRole;
     private String currentUsername;
@@ -64,13 +67,11 @@ public class SurveyTakerController {
      */
     public void initData(String userRole, String username) {
         this.currentUserRole = userRole;
-        // FIX: Use the actual logged-in username instead of the hardcoded value "kumar"
         this.currentUsername = username;
         lblUsername.setText("Logged in as: " + currentUsername + " (" + currentUserRole + ")");
     }
 
     private void loadActiveSurveys() {
-        // FIX: Use MongoManager.getInstance().getDatabase()
         MongoDatabase db = MongoManager.getInstance().getDatabase();
         if (db == null) return;
 
@@ -98,7 +99,8 @@ public class SurveyTakerController {
     private void loadSurveyQuestions(String surveyId) {
         questionsContainer.getChildren().clear();
         responseControls.clear();
-        // FIX: Use MongoManager.getInstance().getDatabase()
+        currentQuestionsMetadata.clear(); // Clear old metadata
+
         MongoDatabase db = MongoManager.getInstance().getDatabase();
         if (db == null) return;
 
@@ -108,15 +110,20 @@ public class SurveyTakerController {
 
             if (surveyDoc != null) {
                 List<Document> questions = surveyDoc.getList("questions", Document.class, new ArrayList<>());
+                currentQuestionsMetadata.addAll(questions); // Store the metadata
 
                 for (int i = 0; i < questions.size(); i++) {
                     Document q = questions.get(i);
                     String questionId = q.getString("id");
                     String type = q.getString("type").toUpperCase();
                     String text = q.getString("text");
+                    // Check if the question is marked as mandatory (default to false if key missing)
+                    boolean isMandatory = q.getBoolean("isMandatory", false);
 
                     VBox questionBox = new VBox(5);
-                    Label questionLabel = new Label((i + 1) + ". " + text);
+
+                    String mandatoryMark = isMandatory ? " (*)" : "";
+                    Label questionLabel = new Label((i + 1) + ". " + text + mandatoryMark);
                     questionLabel.setStyle("-fx-font-weight: bold; -fx-padding: 5 0 0 0;");
                     questionBox.getChildren().add(questionLabel);
 
@@ -204,7 +211,9 @@ public class SurveyTakerController {
         }
     }
 
-
+    /**
+     * Core logic to extract responses and perform client-side validation.
+     */
     @FXML
     private void handleSubmit(ActionEvent event) {
         SurveyItem selectedSurvey = cmbSurveySelector.getSelectionModel().getSelectedItem();
@@ -214,21 +223,30 @@ public class SurveyTakerController {
         }
 
         List<Document> responses = new ArrayList<>();
+        List<String> missingAnswers = new ArrayList<>();
 
-        for (Map.Entry<String, Object> entry : responseControls.entrySet()) {
-            String questionId = entry.getKey();
-            Object control = entry.getValue();
+        // Loop through the stored question metadata to check for mandatory status
+        for (Document qMetadata : currentQuestionsMetadata) {
+            String questionId = qMetadata.getString("id");
+            String questionText = qMetadata.getString("text");
+            boolean isMandatory = qMetadata.getBoolean("isMandatory", false);
+
+            Object control = responseControls.get(questionId);
             Object answer = null;
+            boolean answered = false;
 
-            // Extract the answer based on the control type
+            // 1. Extract the answer based on the control type
             if (control instanceof TextField) {
-                answer = ((TextField) control).getText().trim();
+                String text = ((TextField) control).getText().trim();
+                answer = text;
+                answered = !text.isEmpty();
             } else if (control instanceof ToggleGroup) {
                 RadioButton selected = (RadioButton) ((ToggleGroup) control).getSelectedToggle();
                 if (selected != null) {
                     answer = selected.getText();
+                    answered = true;
                 }
-            } else if (control instanceof List) {
+            } else if (control instanceof List) { // Multi-Choice (Checkboxes)
                 List<String> selectedOptions = new ArrayList<>();
                 for (Object obj : (List) control) {
                     if (obj instanceof CheckBox) {
@@ -239,12 +257,22 @@ public class SurveyTakerController {
                     }
                 }
                 answer = selectedOptions;
+                answered = !selectedOptions.isEmpty();
             }
 
-            // Collect the answer.
-            if (answer == null || (answer instanceof String && ((String)answer).isEmpty())) {
+            // 2. Perform Validation Check
+            if (isMandatory && !answered) {
+                // If mandatory and not answered, record it as missing.
+                missingAnswers.add(questionText);
+            }
+
+            // 3. Collect the response for submission (even if empty, unless validation fails)
+            // Ensure answer is properly formatted for MongoDB (empty string or empty list)
+            if (answer == null) {
+                // If it was a mandatory field, it's already caught above. If optional, store empty string.
                 answer = "";
             } else if (answer instanceof List && ((List)answer).isEmpty()) {
+                // Keep empty list if it was a list type
                 answer = new ArrayList<String>();
             }
 
@@ -254,6 +282,16 @@ public class SurveyTakerController {
             );
         }
 
+        // --- FINAL VALIDATION CHECK ---
+        if (!missingAnswers.isEmpty()) {
+            String missingList = String.join("\n- ", missingAnswers);
+            showAlert("Validation Error",
+                    "The following mandatory questions must be answered before submitting:\n- " + missingList,
+                    AlertType.ERROR);
+            return; // STOP submission
+        }
+
+        // --- SUBMISSION ---
         if (!responses.isEmpty()) {
             saveResponse(selectedSurvey.id, responses);
         } else {
@@ -262,7 +300,6 @@ public class SurveyTakerController {
     }
 
     private void saveResponse(String surveyId, List<Document> responses) {
-        // FIX: Use MongoManager.getInstance().getDatabase()
         MongoDatabase db = MongoManager.getInstance().getDatabase();
 
         if (db == null) {
@@ -284,7 +321,6 @@ public class SurveyTakerController {
 
             showAlert("Success", "Survey response saved successfully! Form is now reset for the next entry.", AlertType.INFORMATION);
 
-            // CRITICAL CHANGE: Instead of clearing the whole selection, just reset the inputs.
             resetForm();
 
         } catch (MongoException e) {

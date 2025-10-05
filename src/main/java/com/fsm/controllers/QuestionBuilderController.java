@@ -17,6 +17,7 @@ import java.util.List;
 import javafx.scene.control.Label;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.ComboBox;
+import javafx.scene.control.CheckBox; // ADDED: Import CheckBox
 import javafx.scene.layout.VBox;
 import javafx.scene.layout.HBox;
 import java.util.UUID;
@@ -27,12 +28,14 @@ public class QuestionBuilderController {
         private String text;
         private String type; // e.g., "TEXT", "SINGLE_CHOICE", "RATING"
         private List<String> options; // Used for MULTIPLE_CHOICE type
+        private boolean isMandatory; // ADDED: Mandatory status
 
-        public Question(String id, String text, String type, List<String> options) {
+        public Question(String id, String text, String type, List<String> options, boolean isMandatory) { // UPDATED Constructor
             this.id = id;
             this.text = text;
             this.type = type;
             this.options = (options != null) ? options : new ArrayList<>();
+            this.isMandatory = isMandatory; // Initialize new field
         }
 
         // Simple Getters (no setters needed for this transient model)
@@ -40,11 +43,13 @@ public class QuestionBuilderController {
         public String getText() { return text; }
         public String getType() { return type; }
         public List<String> getOptions() { return options; }
+        public boolean isMandatory() { return isMandatory; } // ADDED Getter
     }
-    // FXML elements will go here
+    // FXML elements
     @FXML private Label lblSurveyName;
     @FXML private TextArea txtQuestionText;
     @FXML private ComboBox<String> cmbQuestionType;
+    @FXML private CheckBox chkMandatory; // ADDED: Checkbox for mandatory status
     @FXML private VBox vboxDynamicOptions;
     @FXML private VBox vboxQuestionsList;
     @FXML private Button btnAddQuestion;
@@ -101,13 +106,13 @@ public class QuestionBuilderController {
             optionsArea.setId("optionsInput"); // Use an ID to easily retrieve the value later
             vboxDynamicOptions.getChildren().addAll(label, optionsArea);
         }
-        // We can add logic for RATING_SCALE (e.g., Min/Max/Steps) later if needed
     }
 
     //Handles adding a question from the input panel to the currentQuestions list
     private void handleAddQuestion() {
         String text = txtQuestionText.getText().trim();
         String type = cmbQuestionType.getValue();
+        boolean isMandatory = chkMandatory.isSelected(); // NEW: Get mandatory status
 
         if (text.isEmpty()) {
             System.err.println("Question text cannot be empty.");
@@ -132,8 +137,8 @@ public class QuestionBuilderController {
         // Generate a simple unique ID
         String questionId = "Q" + (++questionCounter);
 
-        // Create new Question object and add to list
-        Question newQuestion = new Question(questionId, text, type, options);
+        // Create new Question object and add to list (UPDATED: Added isMandatory)
+        Question newQuestion = new Question(questionId, text, type, options, isMandatory);
         currentQuestions.add(newQuestion);
 
         // Redraw the list to show the new question
@@ -141,13 +146,13 @@ public class QuestionBuilderController {
 
         // Clear the input fields for the next question
         txtQuestionText.clear();
+        chkMandatory.setSelected(false); // NEW: Reset mandatory status
         updateDynamicOptions(type);
     }
 
     private void loadExistingQuestions(String surveyName) {
         currentQuestions.clear();
 
-        // FIX: Use MongoManager.getInstance().getDatabase() instead of MongoManager.connect()
         MongoDatabase db = MongoManager.getInstance().getDatabase();
         if (db == null) return;
 
@@ -162,12 +167,15 @@ public class QuestionBuilderController {
                 for (Document qDoc : questionDocs) {
                     // Reconstruct the Question object from the MongoDB Document
                     List<String> options = qDoc.containsKey("options") ? (List<String>) qDoc.get("options") : new ArrayList<>();
+                    // NEW: Retrieve isMandatory status (default to false if not present)
+                    boolean isMandatory = qDoc.getBoolean("isMandatory", false);
 
                     Question q = new Question(
                             qDoc.getString("id"),
                             qDoc.getString("text"),
                             qDoc.getString("type"),
-                            options
+                            options,
+                            isMandatory // Pass mandatory status
                     );
                     currentQuestions.add(q);
 
@@ -204,8 +212,9 @@ public class QuestionBuilderController {
             VBox questionBox = new VBox(5);
             questionBox.setStyle("-fx-border-color: #ccc; -fx-padding: 10px; -fx-background-color: #f9f9f9;");
 
-            // Question Header (Q#, Text)
-            Label header = new Label(String.format("%d. %s (%s)", (i + 1), q.getText(), q.getType()));
+            // Question Header (Q#, Text, Type, and MANDATORY indicator)
+            String mandatoryIndicator = q.isMandatory() ? " (MANDATORY)" : ""; // NEW Indicator
+            Label header = new Label(String.format("%d. %s (%s)%s", (i + 1), q.getText(), q.getType(), mandatoryIndicator));
             header.setStyle("-fx-font-weight: bold;");
 
             // Options Display (if applicable)
@@ -239,7 +248,8 @@ public class QuestionBuilderController {
             Document qDoc = new Document("id", q.getId())
                     .append("text", q.getText())
                     .append("type", q.getType())
-                    .append("options", q.getOptions());
+                    .append("options", q.getOptions())
+                    .append("isMandatory", q.isMandatory()); // CRITICAL: Save the mandatory status
             questionDocs.add(qDoc);
         }
 
@@ -264,7 +274,6 @@ public class QuestionBuilderController {
      * @return true if update was successful.
      */
     private boolean saveQuestionsToMongo(List<Document> questionDocs, int questionCount) {
-        // FIX: Use MongoManager.getInstance().getDatabase() instead of MongoManager.connect()
         MongoDatabase db = MongoManager.getInstance().getDatabase();
         if (db == null) return false;
 
@@ -278,7 +287,7 @@ public class QuestionBuilderController {
             org.bson.conversions.Bson updateQuestions = Updates.set("questions", questionDocs);
 
             // Update 2: Set the CRITICAL 'numQuestions' integer field
-            org.bson.conversions.Bson updateCount = Updates.set("numQuestions", questionCount); // <<< CRITICAL FIX
+            org.bson.conversions.Bson updateCount = Updates.set("numQuestions", questionCount);
 
             // Combine updates into a single list
             List<org.bson.conversions.Bson> updatesList = List.of(updateQuestions, updateCount);
